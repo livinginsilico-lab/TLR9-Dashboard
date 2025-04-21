@@ -14,7 +14,7 @@ st.title("RNA-Protein Binding Prediction Tool")
 
 # Load your data
 # In a real implementation, you would load your actual model and data
-df = pd.read_csv("path/to/your/data.csv")  # Replace with your actual data path
+df = pd.read_csv("merged_rna_data.csv")
 
 # Simple sequence analysis section
 st.header("RNA Sequence Binding Predictor")
