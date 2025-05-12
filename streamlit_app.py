@@ -719,11 +719,11 @@ elif page == "📈 Model Performance":
        # Visualization of calibration thresholds
         st.markdown("### Calibration Thresholds")
        
-       threshold_data = {
+        threshold_data = {
            'Feature': ['Cytosine Content', 'UG/GU Motifs', 'UG/GU Density'],
            'Threshold': [18, 2, 12],
            'Unit': ['%', 'count', '%']
-       }
+        }
        
        thresh_df = pd.DataFrame(threshold_data)
        fig = px.bar(thresh_df, x='Feature', y='Threshold', color='Feature',
