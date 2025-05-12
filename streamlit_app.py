@@ -835,7 +835,7 @@ elif page == "📈 Model Performance":
 st.divider()
 st.markdown("""
 <div style="text-align: center; color: #666;">
-   <p>RNA-Protein Binding Prediction Tool | Model based on ANOVA threshold: -6676.38</p>
-   <p>Contact: your-email@example.com</p>
+    <p>RNA-Protein Binding Prediction Tool | Model based on ANOVA threshold: -6676.38</p>
+    <p>Contact: your-email@example.com</p>
 </div>
 """, unsafe_allow_html=True)
