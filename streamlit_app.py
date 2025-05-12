@@ -831,10 +831,10 @@ elif page == "📈 Model Performance":
            )
            st.dataframe(calib_pivot)
 
-# Add footer
+# Add a simpler footer
 st.divider()
-st.markdown("""
-<div style="text-align: center; color: #666;">
+st.markdown("RNA-Protein Binding Prediction Tool | Model based on ANOVA threshold: -6676.38")
+st.markdown("Contact: your-email@example.com")
     <p>RNA-Protein Binding Prediction Tool | Model based on ANOVA threshold: -6676.38</p>
     <p>Contact: your-email@example.com</p>
 </div>
