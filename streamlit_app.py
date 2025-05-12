@@ -717,7 +717,7 @@ elif page == "📈 Model Performance":
         st.write("3. **Result**: This approach reduced average error by 26.7% and fixed catastrophic errors while maintaining accuracy for well-predicted sequences")
        
        # Visualization of calibration thresholds
-       st.markdown("### Calibration Thresholds")
+        st.markdown("### Calibration Thresholds")
        
        threshold_data = {
            'Feature': ['Cytosine Content', 'UG/GU Motifs', 'UG/GU Density'],
