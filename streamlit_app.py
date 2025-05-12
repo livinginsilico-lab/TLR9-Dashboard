@@ -703,24 +703,18 @@ elif page == "📈 Model Performance":
                 improvement = row['Before'] - row['After']
                 st.metric("After", f"{row['After']:.2f}", delta=f"-{improvement:.2f}")
         
-        # Show calibration explanation
+       # Show calibration explanation
         st.markdown("### Calibration Approach")
-        st.markdown("""
-        Our model uses a targeted calibration approach
-      # Show calibration explanation
-       st.markdown("### Calibration Approach")
-       st.markdown("""
-       Our model uses a targeted calibration approach that applies corrections only to sequences with multiple indicators of problematic binding characteristics:
-
-       1. **Detection**: We identify sequences likely to have prediction errors based on:
-          - Low cytosine content (< 18%)
-          - Multiple UG/GU-rich motifs
-          - High UG/GU dinucleotide density (> 12%)
-
-       2. **Calibration**: We apply a fixed correction of 400 points only to sequences meeting at least two of these criteria
-       
-       3. **Result**: This approach reduced average error by 26.7% and fixed catastrophic errors while maintaining accuracy for well-predicted sequences
-       """)
+        st.write("Our model uses a targeted calibration approach that applies corrections only to sequences with multiple indicators of problematic binding characteristics:")
+                
+        st.write("1. **Detection**: We identify sequences likely to have prediction errors based on:")
+        st.write("   - Low cytosine content (< 18%)")
+        st.write("   - Multiple UG/GU-rich motifs")
+        st.write("   - High UG/GU dinucleotide density (> 12%)")
+                
+        st.write("2. **Calibration**: We apply a fixed correction of 400 points only to sequences meeting at least two of these criteria")
+                
+        st.write("3. **Result**: This approach reduced average error by 26.7% and fixed catastrophic errors while maintaining accuracy for well-predicted sequences")
        
        # Visualization of calibration thresholds
        st.markdown("### Calibration Thresholds")
