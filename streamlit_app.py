@@ -731,8 +731,8 @@ elif page == "📈 Model Performance":
     }
     
     thresh_df = pd.DataFrame(threshold_data)
-    
-    fig = px.bar(
+
+fig = px.bar(
        thresh_df, 
        x='Feature', 
        y='Threshold',
