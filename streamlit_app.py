@@ -340,51 +340,44 @@ if page == "Home":
         <div class="card">
             <h3>About this tool</h3>
             <p>This platform provides comprehensive tools for RNA sequence analysis and generation, specifically focusing on RNA-protein binding interactions. Whether you're conducting research, analyzing specific sequences, or designing RNA with desired binding characteristics, our tool provides the insights you need.</p>
-            
-            <h4>Key Features:</h4>
-            <ul>
-                <li><strong>Sequence Analyzer:</strong> Analyze RNA sequences and predict their binding affinity with proteins</li>
-                <li><strong>Generation Tool:</strong> Create novel RNA sequences with specific binding characteristics</li>
-                <li><strong>Dataset Insights:</strong> Explore patterns and factors affecting RNA-protein binding</li>
-                <li><strong>Model Performance:</strong> Understand the accuracy and calibration of our prediction models</li>
-            </ul>
         </div>
         """, unsafe_allow_html=True)
+        
+        st.markdown("#### Key Features:")
+        st.markdown("- **Sequence Analyzer:** Analyze RNA sequences and predict their binding affinity with proteins")
+        st.markdown("- **Generation Tool:** Create novel RNA sequences with specific binding characteristics") 
+        st.markdown("- **Dataset Insights:** Explore patterns and factors affecting RNA-protein binding")
+        st.markdown("- **Model Performance:** Understand the accuracy and calibration of our prediction models")
         
         st.markdown("""
         <div class="card">
             <h3>Our Research Findings</h3>
             <p>Based on extensive analysis, we've identified several key factors that influence RNA-protein binding:</p>
-            
-            <h4>Factors that enhance binding:</h4>
-            <ul>
-                <li>Higher cytosine content (>25%)</li>
-                <li>Higher GC content (>50%)</li>
-                <li>Presence of specific motifs like 'AAGAGA', 'AGCCUG', 'AGAAAG'</li>
-            </ul>
-            
-            <h4>Factors that weaken binding:</h4>
-            <ul>
-                <li>Low cytosine content (<18%)</li>
-                <li>UG/GU-rich repetitive motifs</li>
-                <li>G nucleotides at certain positions (2, 6, 9, 19)</li>
-            </ul>
         </div>
         """, unsafe_allow_html=True)
+        
+        st.markdown("#### Factors that enhance binding:")
+        st.markdown("- Higher cytosine content (>25%)")
+        st.markdown("- Higher GC content (>50%)")
+        st.markdown("- Presence of specific motifs like 'AAGAGA', 'AGCCUG', 'AGAAAG'")
+        
+        st.markdown("#### Factors that weaken binding:")
+        st.markdown("- Low cytosine content (<18%)")
+        st.markdown("- UG/GU-rich repetitive motifs")
+        st.markdown("- G nucleotides at certain positions (2, 6, 9, 19)")
         
     with col2:
         st.markdown("""
         <div class="card">
             <h3>Quick Actions</h3>
             <p>Navigate to different sections of the tool:</p>
-            <ul>
-                <li>🔬 Analyze a Sequence</li>
-                <li>🧪 Generate RNA Sequences</li>
-                <li>📊 View Dataset Insights</li>
-                <li>⚡ Model Performance</li>
-            </ul>
         </div>
         """, unsafe_allow_html=True)
+        
+        st.markdown("- 🔬 Analyze a Sequence")
+        st.markdown("- 🧪 Generate RNA Sequences") 
+        st.markdown("- 📊 View Dataset Insights")
+        st.markdown("- ⚡ Model Performance")
         
         st.markdown("""
         <div class="card">
