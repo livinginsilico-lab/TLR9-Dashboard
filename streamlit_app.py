@@ -813,10 +813,9 @@ elif page == "Dataset Insights":
         with col1:
             st.metric("Average Score", f"{df['Score'].mean():.2f}")
         with col2:
-            st.metric("Median Score", f"{df['Score'].median():.2f}")
+            st.empty()
         with col3:
-            good_binders = (df['Score'] < -6676.38).sum()
-            st.metric("Good Binders", f"{good_binders} ({good_binders/len(df)*100:.1f}%)")
+            st.empty()
             
     with tab2:
         st.markdown("### Key Binding Factors")
