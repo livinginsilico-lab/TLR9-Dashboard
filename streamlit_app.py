@@ -87,7 +87,7 @@ st.markdown('<h1 class="main-header">RNA-Protein Binding Prediction Tool</h1>', 
 with st.sidebar:
     st.image("https://raw.githubusercontent.com/plotly/dash-sample-apps/master/apps/dash-dna-precipitation/assets/DNA_strand.png", use_column_width=True)
     st.markdown("### Navigation")
-    page = st.radio("", ["Home", "Sequence Analyzer", "Generation Tool", "Dataset Insights", "Model Performance"])
+    page = st.radio("", ["Home", "Sequence Analyzer", "Generation Tool", "Dataset Insights"])
     
     st.markdown("---")
     st.markdown("### About")
@@ -317,22 +317,6 @@ df = load_data()
 if page == "Home":
     st.markdown('<h2 class="sub-header">Welcome to the RNA-Protein Binding Prediction Tool</h2>', unsafe_allow_html=True)
     
-    # Dataset statistics
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("Total Sequences", len(df))
-    
-    with col2:
-        good_binders = (df['Score'] < -6676.38).sum()
-        st.metric("Good Binders", good_binders)
-    
-    with col3:
-        st.metric("Average Score", f"{df['Score'].mean():.1f}")
-    
-    with col4:
-        st.metric("Model Accuracy", "95.2%")
-    
     col1, col2 = st.columns([2, 1])
     
     with col1:
@@ -347,7 +331,6 @@ if page == "Home":
         st.markdown("- **Sequence Analyzer:** Analyze RNA sequences and predict their binding affinity with proteins")
         st.markdown("- **Generation Tool:** Create novel RNA sequences with specific binding characteristics") 
         st.markdown("- **Dataset Insights:** Explore patterns and factors affecting RNA-protein binding")
-        st.markdown("- **Model Performance:** Understand the accuracy and calibration of our prediction models")
         
         st.markdown("""
         <div class="card">
@@ -377,7 +360,6 @@ if page == "Home":
         st.markdown("- 🔬 Analyze a Sequence")
         st.markdown("- 🧪 Generate RNA Sequences") 
         st.markdown("- 📊 View Dataset Insights")
-        st.markdown("- ⚡ Model Performance")
         
         st.markdown("""
         <div class="card">
@@ -984,266 +966,6 @@ elif page == "Dataset Insights":
         ax.axhline(y=0, color='gray', linestyle='--')
         ax.grid(True, linestyle='--', alpha=0.7)
         st.pyplot(fig)
-
-# Model Performance page
-elif page == "Model Performance":
-    st.markdown('<h2 class="sub-header">Model Performance</h2>', unsafe_allow_html=True)
-    
-    # Display calibration results
-    st.markdown("### Effect of Calibration on Prediction Errors")
-    
-    # Sample data for calibration effect
-    calibration_data = {
-        'RNA_Name': ['lnc-SSTR4-24', 'lnc-KHSRP-12', 'lnc-BPY2C-22', 'lnc-BRF2-171', 'lnc-ALG1L-41'],
-        'Original_Error': [588.11, 515.30, 864.55, 564.00, 508.00],
-        'Calibrated_Error': [188.11, 115.30, 464.55, 164.00, 108.00]
-    }
-    
-    calib_df = pd.DataFrame(calibration_data)
-    
-    # Summary metrics
-    orig_avg = calib_df['Original_Error'].mean()
-    calib_avg = calib_df['Calibrated_Error'].mean()
-    improvement = orig_avg - calib_avg
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Original Avg Error", f"{orig_avg:.2f}", delta=None)
-    with col2:
-        st.metric("Calibrated Avg Error", f"{calib_avg:.2f}", delta=None)
-    with col3:
-        st.metric("Improvement", f"{improvement:.2f}", delta=f"{(improvement/orig_avg)*100:.1f}%")
-    
-    # Plot comparison
-    fig, ax = plt.subplots(figsize=(12, 6))
-    x = np.arange(len(calib_df['RNA_Name']))
-    width = 0.35
-    
-    ax.bar(x - width/2, calib_df['Original_Error'], width, label='Original Error', color='#ff7f0e')
-    ax.bar(x + width/2, calib_df['Calibrated_Error'], width, label='Calibrated Error', color='#1f77b4')
-    ax.set_xlabel('RNA Sequence', fontsize=12)
-    ax.set_ylabel('Prediction Error', fontsize=12)
-    ax.set_title('Error Reduction with Model Calibration', fontsize=14)
-    ax.set_xticks(x)
-    ax.set_xticklabels(calib_df['RNA_Name'], rotation=45)
-    ax.legend()
-    fig.tight_layout()
-    st.pyplot(fig)
-    
-    # Model validation
-    st.markdown("### Cross-Validation Performance")
-    
-    # Create tabs for different validation metrics
-    val1, val2, val3 = st.tabs(["Overall Metrics", "Feature Ablation", "Learning Curves"])
-    
-    with val1:
-        # Create columns for metrics
-        c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            st.metric("Mean Absolute Error", "284.36")
-        with c2:
-            st.metric("R² Score", "0.78")
-        with c3:
-            st.metric("RMSE", "326.92")
-        with c4:
-            st.metric("Explained Variance", "0.79")
-            
-        # Create scatter plot of predicted vs actual
-        np.random.seed(42)
-        n_samples = 100
-        actual = np.random.uniform(-7500, -6000, n_samples)
-        # Add some noise to create predicted values
-        predicted = actual + np.random.normal(0, 150, n_samples)
-        
-        pred_df = pd.DataFrame({
-            'Actual': actual,
-            'Predicted': predicted
-        })
-        
-        fig, ax = plt.subplots(figsize=(10, 8))
-        sns.scatterplot(x='Actual', y='Predicted', data=pred_df, ax=ax, alpha=0.7)
-        
-        # Add perfect prediction line
-        lims = [
-            np.min([ax.get_xlim(), ax.get_ylim()]),  # min of both axes
-            np.max([ax.get_xlim(), ax.get_ylim()]),  # max of both axes
-        ]
-        ax.plot(lims, lims, 'r--', alpha=0.75, zorder=0, label='Perfect Prediction')
-        
-        # Add regression line
-        sns.regplot(x='Actual', y='Predicted', data=pred_df, ax=ax, 
-                   scatter=False, line_kws={"color": "blue"}, label='Regression Line')
-        
-        ax.set_title("Predicted vs Actual Binding Scores", fontsize=14)
-        ax.set_xlabel("Actual Binding Score", fontsize=12)
-        ax.set_ylabel("Predicted Binding Score", fontsize=12)
-        ax.legend()
-        st.pyplot(fig)
-        
-    with val2:
-        st.markdown("### Feature Importance Analysis")
-        st.markdown("""
-        We conducted feature ablation studies to determine the importance of different features in our model.
-        Each feature was systematically removed, and the resulting impact on model performance was measured.
-        """)
-        
-        # Create sample ablation data
-        ablation_data = {
-            'Feature Removed': ['None (Full Model)', 'Cytosine Content', 'GC Content', 
-                               'Sequence Length', 'A-rich Motifs', 'UG-rich Motifs'],
-            'MAE': [284.36, 372.18, 348.27, 291.45, 302.62, 299.08],
-            'R² Score': [0.78, 0.62, 0.65, 0.77, 0.75, 0.76]
-        }
-        
-        ablation_df = pd.DataFrame(ablation_data)
-        
-        # Plot MAE changes
-        fig, ax = plt.subplots(figsize=(12, 6))
-        bars = sns.barplot(x='Feature Removed', y='MAE', data=ablation_df, ax=ax, palette='rocket')
-        ax.set_title("Effect of Feature Removal on Mean Absolute Error", fontsize=14)
-        ax.set_ylabel("Mean Absolute Error", fontsize=12)
-        ax.set_xlabel("")
-        plt.xticks(rotation=45)
-        
-        # Add value labels
-        for i, bar in enumerate(bars.patches):
-            bars.text(bar.get_x() + bar.get_width()/2., 
-                     bar.get_height() + 5, 
-                     round(ablation_df['MAE'].iloc[i], 1), 
-                     ha='center', va='bottom', fontsize=10)
-            
-        fig.tight_layout()
-        st.pyplot(fig)
-        
-        # Plot R² changes
-        fig, ax = plt.subplots(figsize=(12, 6))
-        bars = sns.barplot(x='Feature Removed', y='R² Score', data=ablation_df, ax=ax, palette='crest')
-        ax.set_title("Effect of Feature Removal on R² Score", fontsize=14)
-        ax.set_ylabel("R² Score", fontsize=12)
-        ax.set_xlabel("")
-        plt.xticks(rotation=45)
-        
-        # Add value labels
-        for i, bar in enumerate(bars.patches):
-            bars.text(bar.get_x() + bar.get_width()/2., 
-                     bar.get_height() + 0.01, 
-                     round(ablation_df['R² Score'].iloc[i], 2), 
-                     ha='center', va='bottom', fontsize=10)
-            
-        fig.tight_layout()
-        st.pyplot(fig)
-        
-    with val3:
-        st.markdown("### Learning Curves")
-        st.markdown("""
-        The learning curves below show how model performance improves with more training data.
-        This helps us understand if our model would benefit from more data or if we've reached diminishing returns.
-        """)
-        
-        # Create sample learning curve data
-        train_sizes = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
-        train_errors = [450, 380, 340, 320, 302, 290, 282, 275, 270, 268]
-        val_errors = [510, 450, 410, 390, 372, 365, 360, 358, 355, 354]
-        
-        lc_df = pd.DataFrame({
-            'Training Size (%)': [t * 100 for t in train_sizes],
-            'Training Error': train_errors,
-            'Validation Error': val_errors
-        })
-        
-        # Create learning curve plot
-        fig, ax = plt.subplots(figsize=(12, 6))
-        sns.lineplot(x='Training Size (%)', y='Training Error', data=lc_df, 
-                    marker='o', ax=ax, label='Training Error')
-        sns.lineplot(x='Training Size (%)', y='Validation Error', data=lc_df, 
-                    marker='s', ax=ax, label='Validation Error')
-        
-        ax.set_title("Learning Curves", fontsize=14)
-        ax.set_ylabel("Mean Absolute Error", fontsize=12)
-        ax.set_xlabel("Training Dataset Size (%)", fontsize=12)
-        ax.grid(True, linestyle='--', alpha=0.7)
-        ax.legend()
-        st.pyplot(fig)
-        
-        # Add explanation
-        st.markdown("""
-        **Interpretation:**
-        - Training error decreases with more data, as expected
-        - Validation error also continues to decrease with more data
-        - The gap between training and validation errors is narrowing but still present
-        - This suggests that gathering more training data may still improve model performance
-        """)
-    
-    # Calibration approach explanation
-    st.markdown("### Model Calibration Approach")
-    st.markdown("""
-    <div class="card">
-        <p>Our model uses a targeted calibration approach that applies corrections only to sequences with multiple indicators of problematic binding characteristics:</p>
-        
-        <ol>
-            <li>We identify sequences likely to have prediction errors based on:
-                <ul>
-                    <li>Low cytosine content (&lt; 18%)</li>
-                    <li>Multiple UG/GU-rich motifs</li>
-                    <li>High UG/GU dinucleotide density (&gt; 12%)</li>
-                </ul>
-            </li>
-            <li>We apply a fixed correction of 400 points only to sequences meeting at least two of these criteria</li>
-            <li>This approach reduced average error by 26.7% and fixed catastrophic errors while maintaining accuracy for well-predicted sequences</li>
-        </ol>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Model architecture
-    st.markdown("### Model Architecture")
-    
-    # Create columns for architecture visualization
-    arch_col1, arch_col2 = st.columns([1, 2])
-    
-    with arch_col1:
-        st.markdown("""
-        <div class="card">
-            <h4>Architecture Details</h4>
-            <ul>
-                <li><strong>Base Model:</strong> Transformer-based</li>
-                <li><strong>Parameters:</strong> 124M</li>
-                <li><strong>Embedding Size:</strong> 768</li>
-                <li><strong>Layers:</strong> 12</li>
-                <li><strong>Attention Heads:</strong> 12</li>
-                <li><strong>Activation:</strong> GELU</li>
-                <li><strong>Training Dataset:</strong> 35,000 RNA sequences</li>
-                <li><strong>Fine-tuned with:</strong> Reinforcement Learning from Human Feedback</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with arch_col2:
-        # Simple text-based architecture description
-        st.markdown("""
-        <div class="card">
-            <h4>Model Pipeline</h4>
-            <p><strong>1. Input RNA Sequence</strong><br>
-            Raw nucleotide sequence (A, U, G, C)</p>
-            
-            <p><strong>2. Tokenization</strong><br>
-            Convert sequence to numerical tokens</p>
-            
-            <p><strong>3. Sequence Embedding</strong><br>
-            Create dense vector representations</p>
-            
-            <p><strong>4. Transformer Layers (12×)</strong><br>
-            Multi-head attention and feed-forward networks</p>
-            
-            <p><strong>5. Feature Extraction</strong><br>
-            Extract binding-relevant features</p>
-            
-            <p><strong>6. Calibration Layer</strong><br>
-            Apply targeted corrections for edge cases</p>
-            
-            <p><strong>7. Binding Score Prediction</strong><br>
-            Final numerical binding affinity score</p>
-        </div>
-        """, unsafe_allow_html=True)
 
 # Footer
 st.markdown("""
