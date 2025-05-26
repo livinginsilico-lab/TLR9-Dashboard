@@ -806,16 +806,6 @@ elif page == "Dataset Insights":
         ax.legend(fontsize=10)
         ax.set_title("Distribution of RNA-Protein Binding Scores", fontsize=14)
         st.pyplot(fig)
-        
-        # Additional statistics
-        st.markdown("### Key Statistics")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Average Score", f"{df['Score'].mean():.2f}")
-        with col2:
-            st.empty()
-        with col3:
-            st.empty()
             
     with tab2:
         st.markdown("### Key Binding Factors")
