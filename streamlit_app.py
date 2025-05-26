@@ -467,20 +467,16 @@ if page == "Home":
         
         # Navigation buttons with improved styling
         if st.button("🔬 Analyze Sequence", use_container_width=True, type="primary"):
-            st.session_state.page = "Sequence Analyzer"
-            st.rerun()
+            st.switch_page("Sequence Analyzer")
             
         if st.button("🧪 Generate RNA", use_container_width=True):
-            st.session_state.page = "Generation Tool"
-            st.rerun()
+            st.switch_page("Generation Tool")
             
         if st.button("📊 View Insights", use_container_width=True):
-            st.session_state.page = "Dataset Insights"
-            st.rerun()
+            st.switch_page("Dataset Insights")
             
         if st.button("⚡ Model Stats", use_container_width=True):
-            st.session_state.page = "Model Performance"
-            st.rerun()
+            st.switch_page("Model Performance")
         
         st.markdown("---")
         
