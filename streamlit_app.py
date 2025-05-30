@@ -9,6 +9,8 @@ import sys
 import random
 from contextlib import nullcontext
 from tqdm import tqdm
+from transformers import AutoTokenizer, GPT2ForSequenceClassification
+import joblib
 
 # Make sure TOKENIZERS_PARALLELISM warning doesn't appear
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -83,6 +85,15 @@ st.markdown("""
 # Add custom header
 st.markdown('<h1 class="main-header">RNA-Protein Binding Prediction Tool</h1>', unsafe_allow_html=True)
 
+# Initialize session state for model loading
+if 'models_loaded' not in st.session_state:
+    st.session_state.models_loaded = False
+    st.session_state.score_model = None
+    st.session_state.rmsd_model = None
+    st.session_state.tokenizer = None
+    st.session_state.score_scaler = None
+    st.session_state.rmsd_scaler = None
+
 # Create sidebar for navigation
 with st.sidebar:
     st.image("https://raw.githubusercontent.com/plotly/dash-sample-apps/master/apps/dash-dna-precipitation/assets/DNA_strand.png", use_column_width=True)
@@ -97,6 +108,68 @@ with st.sidebar:
     st.markdown("- 🔮 Binding prediction")
     st.markdown("- 🧪 RNA sequence generation")
     st.markdown("- 📊 Dataset visualization")
+    
+    # Model selection
+    st.markdown("---")
+    st.markdown("### Model Settings")
+    prediction_type = st.selectbox(
+        "Prediction Type",
+        ["Score", "RMSD"],
+        help="Choose whether to predict binding Score or RMSD"
+    )
+
+# Helper functions for model loading
+@st.cache_resource
+def load_models():
+    """Load all models and tokenizers."""
+    try:
+        # Load tokenizer
+        tokenizer_path = "tokenizer"
+        if os.path.exists(tokenizer_path):
+            tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+        else:
+            # Fallback to GPT2 tokenizer if custom tokenizer not found
+            tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        tokenizer.pad_token = tokenizer.eos_token
+        
+        # Load Score model
+        score_model = None
+        score_scaler = None
+        score_model_path = "models/score_predictor/final_model"
+        if os.path.exists(score_model_path):
+            score_model = GPT2ForSequenceClassification.from_pretrained(score_model_path)
+            score_model.eval()
+            score_scaler_path = "models/score_predictor/score_scaler.pkl"
+            if os.path.exists(score_scaler_path):
+                score_scaler = joblib.load(score_scaler_path)
+        
+        # Load RMSD model
+        rmsd_model = None
+        rmsd_scaler = None
+        rmsd_model_path = "models/rmsd_predictor/final_model"
+        if os.path.exists(rmsd_model_path):
+            rmsd_model = GPT2ForSequenceClassification.from_pretrained(rmsd_model_path)
+            rmsd_model.eval()
+            rmsd_scaler_path = "models/rmsd_predictor/rmsd_scaler.pkl"
+            if os.path.exists(rmsd_scaler_path):
+                rmsd_scaler = joblib.load(rmsd_scaler_path)
+        
+        return tokenizer, score_model, score_scaler, rmsd_model, rmsd_scaler
+    except Exception as e:
+        st.error(f"Error loading models: {str(e)}")
+        return None, None, None, None, None
+
+# Load models
+if not st.session_state.models_loaded:
+    with st.spinner("Loading models..."):
+        tokenizer, score_model, score_scaler, rmsd_model, rmsd_scaler = load_models()
+        if tokenizer is not None:
+            st.session_state.tokenizer = tokenizer
+            st.session_state.score_model = score_model
+            st.session_state.score_scaler = score_scaler
+            st.session_state.rmsd_model = rmsd_model
+            st.session_state.rmsd_scaler = rmsd_scaler
+            st.session_state.models_loaded = True
 
 # Helper functions for the first module (sequence analysis)
 def extract_features(sequence):
@@ -125,30 +198,65 @@ def extract_features(sequence):
         'gc_content': gc_content
     }
 
-def predict_binding(sequence):
-    """Simple binding prediction based on findings"""
-    features = extract_features(sequence)
-    if not features:
-        return -7200  # Default value
+def predict_binding(sequence, prediction_type="Score"):
+    """Predict binding using the trained ML model."""
+    if prediction_type == "Score":
+        model = st.session_state.score_model
+        scaler = st.session_state.score_scaler
+    else:
+        model = st.session_state.rmsd_model
+        scaler = st.session_state.rmsd_scaler
     
-    # Base score
-    score = -7200
+    if model is None or st.session_state.tokenizer is None:
+        # Fallback to simple prediction
+        features = extract_features(sequence)
+        if not features:
+            return -7200 if prediction_type == "Score" else 200
+        
+        # Base value
+        if prediction_type == "Score":
+            value = -7200
+            if features['c_percent'] > 25:
+                value -= 100
+            elif features['c_percent'] < 18:
+                value += 200
+            if features['gc_content'] > 50:
+                value -= 75
+            value += np.random.normal(0, 50)
+        else:
+            value = 200
+            if features['gc_content'] > 50:
+                value -= 20
+            value += np.random.normal(0, 20)
+        
+        return value
     
-    # Apply adjustments based on findings
-    if features['c_percent'] > 25:
-        score -= 100  # Stronger binding (more negative)
-    elif features['c_percent'] < 18:
-        score += 200  # Weaker binding (less negative)
+    # Use the actual model
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = model.to(device)
     
-    if features['gc_content'] > 50:
-        score -= 75
+    # Tokenize the sequence
+    inputs = st.session_state.tokenizer(
+        sequence,
+        return_tensors="pt",
+        padding=True,
+        truncation=True,
+        max_length=512
+    )
+    inputs = {k: v.to(device) for k, v in inputs.items()}
     
-    # Add randomness for variation
-    score += np.random.normal(0, 50)
+    # Make prediction
+    with torch.no_grad():
+        outputs = model(**inputs)
+        prediction = outputs.logits.cpu().numpy()[0][0]
     
-    return score
+    # Inverse transform if scaler is available
+    if scaler is not None:
+        prediction = scaler.inverse_transform([[prediction]])[0][0]
+    
+    return prediction
 
-def generate_insights(sequence, score):
+def generate_insights(sequence, score, prediction_type="Score"):
     """Generate insights about binding"""
     features = extract_features(sequence)
     if not features:
@@ -156,76 +264,34 @@ def generate_insights(sequence, score):
     
     insights = []
     
-    # Binding threshold from ANOVA
-    if score < -6676.38:
-        insights.append("✅ Good binder (below ANOVA threshold of -6676.38)")
+    if prediction_type == "Score":
+        # Updated threshold
+        if score < -6633.01:
+            insights.append("✅ Good binder (below ANOVA threshold of -6633.01)")
+        else:
+            insights.append("⚠️ Poor binder (above ANOVA threshold of -6633.01)")
+        
+        # Content insights
+        if features['c_percent'] > 25:
+            insights.append(f"✅ High cytosine content ({features['c_percent']:.1f}%) enhances binding")
+        elif features['c_percent'] < 18:
+            insights.append(f"⚠️ Low cytosine content ({features['c_percent']:.1f}%) weakens binding")
+        
+        if features['gc_content'] > 50:
+            insights.append(f"✅ High GC content ({features['gc_content']:.1f}%) improves stability")
     else:
-        insights.append("⚠️ Poor binder (above ANOVA threshold of -6676.38)")
-    
-    # Content insights
-    if features['c_percent'] > 25:
-        insights.append(f"✅ High cytosine content ({features['c_percent']:.1f}%) enhances binding")
-    elif features['c_percent'] < 18:
-        insights.append(f"⚠️ Low cytosine content ({features['c_percent']:.1f}%) weakens binding")
-    
-    if features['gc_content'] > 50:
-        insights.append(f"✅ High GC content ({features['gc_content']:.1f}%) improves stability")
+        # RMSD insights
+        if score < 200:
+            insights.append("✅ Good structural fit (low RMSD)")
+        else:
+            insights.append("⚠️ Poor structural fit (high RMSD)")
     
     return insights
 
-# Helper functions for ML model prediction (placeholder until we have the actual model)
-def setup_model_components():
-    """Setup placeholder for ML model components"""
-    # This function would normally load the actual models and tokenizers
-    # Since we don't have the actual model files, we'll create a placeholder
-    # In production, you'd replace this with actual model loading code
-    
-    # Store in session state so we don't reload the model on every interaction
-    if 'model_components_loaded' not in st.session_state:
-        st.session_state.model_components_loaded = True
-        st.session_state.model_loaded = False
-        
-        try:
-            # We would load the tokenizer and model here in production
-            # For demo purposes, we'll just set placeholders
-            st.session_state.tokenizer_path = "/path/to/silico_tokenizer"
-            st.session_state.model_path = "/path/to/model_checkpoint"
-            
-            # Signal success
-            st.session_state.model_loaded = True
-        except Exception as e:
-            st.error(f"Error loading model components: {str(e)}")
-
-def predict_ml_score(sequence):
+# Helper functions for ML model prediction
+def predict_ml_score(sequence, prediction_type="Score"):
     """Predict binding score using ML model"""
-    # In production, this would use the actual ML model
-    # For now, we'll approximate based on the first model's logic
-
-    # Pretend to be the ML model output - in production, replace with actual model call
-    features = extract_features(sequence)
-    if not features:
-        return {"RMSD_prediction": -7200}
-    
-    # Base score that approximates ML model behavior
-    base_score = -7000
-    
-    # Add feature-based adjustments
-    if features['c_percent'] > 25:
-        base_score -= random.uniform(80, 140)
-    elif features['c_percent'] < 18:
-        base_score += random.uniform(160, 240)
-    
-    if features['gc_content'] > 50:
-        base_score -= random.uniform(50, 100)
-        
-    # Add sequence length factor
-    length_factor = min(features['length'] / 100, 1.5)
-    base_score *= length_factor
-    
-    # Add randomness to simulate model variance
-    base_score += random.normalvariate(0, 100)
-    
-    return {"RMSD_prediction": base_score}
+    return {"prediction": predict_binding(sequence, prediction_type)}
 
 def sampling(num_samples, start, max_new_tokens=256, strategy="top_k", temperature=1.0):
     """
@@ -262,7 +328,7 @@ def sampling(num_samples, start, max_new_tokens=256, strategy="top_k", temperatu
 @st.cache_data
 def load_data():
     try:
-        return pd.read_csv("merged_rna_data.csv")
+        return pd.read_csv("master_rna_data.csv")
     except:
         # Create sample data if file not found
         sequences = [
@@ -280,6 +346,7 @@ def load_data():
         
         # Create scores with some correlation to C content and GC content
         scores = []
+        rmsds = []
         for seq in sequences:
             length = len(seq)
             c_count = seq.count('C')
@@ -289,31 +356,38 @@ def load_data():
             
             # Base score
             score = -7000
+            rmsd = 200
             
             # Add factors that affect binding
             if c_percent > 25:
                 score -= 150
+                rmsd -= 20
             elif c_percent < 18:
                 score += 250
+                rmsd += 30
             
             if gc_content > 50:
                 score -= 100
+                rmsd -= 15
                 
             # Add randomness
             score += np.random.normal(0, 100)
+            rmsd += np.random.normal(0, 20)
             
             scores.append(score)
+            rmsds.append(max(0, rmsd))  # Ensure RMSD is non-negative
             
         # Create DataFrame    
         return pd.DataFrame({
             'RNA_Name': [f'Sample{i+1}' for i in range(10)],
             'Score': scores,
+            'RMSD': rmsds,
             'RNA_Sequence': sequences
         })
 
 df = load_data()
 
-# Home page - SIMPLE UPDATE
+# Home page
 if page == "Home":
     st.markdown('<h2 class="sub-header">Welcome to the RNA-Protein Binding Prediction Tool</h2>', unsafe_allow_html=True)
     
@@ -369,13 +443,18 @@ if page == "Home":
         """, unsafe_allow_html=True)
         
         # Show latest analyzed sequences
-        st.dataframe(df[['RNA_Name', 'Score']].head(5), use_container_width=True)
+        display_df = df[['RNA_Name', 'Score', 'RMSD']].head(5)
+        st.dataframe(display_df, use_container_width=True)
         
         # Threshold visualization
         st.markdown('<h4>ANOVA Binding Threshold</h4>', unsafe_allow_html=True)
         fig, ax = plt.subplots(figsize=(6, 4))
-        sns.histplot(df['Score'], kde=True, color='skyblue', ax=ax)
-        ax.axvline(x=-6676.38, color='red', linestyle='--', label='ANOVA Threshold')
+        
+        # Filter out NaN values
+        scores = df['Score'].dropna()
+        
+        sns.histplot(scores, kde=True, color='skyblue', ax=ax)
+        ax.axvline(x=-6633.01, color='red', linestyle='--', label='ANOVA Threshold')
         ax.set_xlabel("Binding Score")
         ax.set_ylabel("Count")
         ax.set_title("Distribution of Binding Scores")
@@ -390,11 +469,12 @@ elif page == "Sequence Analyzer":
     with st.expander("How to use this analyzer", expanded=False):
         st.markdown("""
         1. Enter your RNA sequence in the text area (A, U, G, C nucleotides)
-        2. Click 'Predict Binding' to analyze the sequence
-        3. View results including binding score, sequence features, and insights
+        2. Select prediction type (Score or RMSD) in the sidebar
+        3. Click 'Predict Binding' to analyze the sequence
+        4. View results including binding score/RMSD, sequence features, and insights
         
         The analyzer evaluates factors like cytosine content and GC content to predict binding affinity.
-        Scores below -6676.38 indicate good binding affinity.
+        Scores below -6633.01 indicate good binding affinity.
         """)
     
     # Input area with improved styling
@@ -410,15 +490,12 @@ elif page == "Sequence Analyzer":
     with col1:
         if st.button("Example: Strong Binder", use_container_width=True):
             sequence_input = "CCUGGGAAGAGAUAAUCUGAAACAACAGUAUAUGACUCAAACUCUCCCUGCUCCCUGCCGGGUCCAAGAAGGGA"
-            st.session_state.sequence_input = sequence_input
     with col2:
         if st.button("Example: Weak Binder", use_container_width=True):
             sequence_input = "AUAUAUAUAUAUAUGUGUGUGUGUGUGUGUGAAAAAAAAAUAUAUAUAUUAUAUAUAUAUAUAUGUGUGUGA"
-            st.session_state.sequence_input = sequence_input
     with col3:
         if st.button("Example: Average Binder", use_container_width=True):
             sequence_input = "GAAGAGAUAAUCUGAAACAACAGUAUAUGACUCAAACUCUCCCUGCUCCCUGCCGAAAAAAAAAAAAAAAAAA"
-            st.session_state.sequence_input = sequence_input
     
     st.markdown("---")
     
@@ -429,16 +506,24 @@ elif page == "Sequence Analyzer":
             sequence = sequence_input.strip().upper().replace('T', 'U')
             
             # Make prediction
-            score = predict_binding(sequence)
-            insights = generate_insights(sequence, score)
+            value = predict_binding(sequence, prediction_type)
+            insights = generate_insights(sequence, value, prediction_type)
             
             # Determine binding strength
-            if score < -7150:
-                binding_strength = "Strong"
-            elif score < -6900:
-                binding_strength = "Moderate"
+            if prediction_type == "Score":
+                if value < -7150:
+                    binding_strength = "Strong"
+                elif value < -6900:
+                    binding_strength = "Moderate"
+                else:
+                    binding_strength = "Weak"
             else:
-                binding_strength = "Weak"
+                if value < 150:
+                    binding_strength = "Excellent"
+                elif value < 200:
+                    binding_strength = "Good"
+                else:
+                    binding_strength = "Poor"
             
             # Display results
             st.markdown("### Analysis Results")
@@ -450,8 +535,8 @@ elif page == "Sequence Analyzer":
                 # Metrics with improved styling
                 st.markdown(f"""
                 <div class="metric-card">
-                    <h4>Binding Score</h4>
-                    <h2>{score:.2f}</h2>
+                    <h4>{prediction_type}</h4>
+                    <h2>{value:.2f}</h2>
                 </div>
                 """, unsafe_allow_html=True)
                 
@@ -463,18 +548,19 @@ elif page == "Sequence Analyzer":
                 """, unsafe_allow_html=True)
                 
                 # Binding threshold
-                threshold = -6676.38
-                is_good_binder = score < threshold
-                binder_quality = "Good" if is_good_binder else "Poor"
-                
-                qualityColor = "#2e7d32" if is_good_binder else "#c62828"
-                st.markdown(f"""
-                <div class="metric-card">
-                    <h4>Binding Quality</h4>
-                    <h2 style="color:{qualityColor};">{binder_quality}</h2>
-                    <p>Threshold: -6676.38 (ANOVA)</p>
-                </div>
-                """, unsafe_allow_html=True)
+                if prediction_type == "Score":
+                    threshold = -6633.01
+                    is_good_binder = value < threshold
+                    binder_quality = "Good" if is_good_binder else "Poor"
+                    
+                    qualityColor = "#2e7d32" if is_good_binder else "#c62828"
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <h4>Binding Quality</h4>
+                        <h2 style="color:{qualityColor};">{binder_quality}</h2>
+                        <p>Threshold: -6633.01 (ANOVA)</p>
+                    </div>
+                    """, unsafe_allow_html=True)
             
             with col2:
                 # Extract and display features
@@ -618,28 +704,39 @@ elif page == "Generation Tool":
                 
                 # Make prediction
                 with st.spinner("Analyzing sequence..."):
-                    prediction = predict_ml_score(clean_sequence)
+                    prediction = predict_ml_score(clean_sequence, prediction_type)
                     
                 # Display result
-                score = prediction.get("RMSD_prediction")
+                value = prediction.get("prediction")
                 
                 # Determine binding quality
-                if score < -6900:
-                    quality = "Strong Binder"
-                    color = "#2e7d32"
-                elif score < -6676.38:
-                    quality = "Good Binder"
-                    color = "#1E88E5"
+                if prediction_type == "Score":
+                    if value < -6900:
+                        quality = "Strong Binder"
+                        color = "#2e7d32"
+                    elif value < -6633.01:
+                        quality = "Good Binder"
+                        color = "#1E88E5"
+                    else:
+                        quality = "Poor Binder" 
+                        color = "#c62828"
                 else:
-                    quality = "Poor Binder" 
-                    color = "#c62828"
+                    if value < 150:
+                        quality = "Excellent Fit"
+                        color = "#2e7d32"
+                    elif value < 200:
+                        quality = "Good Fit"
+                        color = "#1E88E5"
+                    else:
+                        quality = "Poor Fit"
+                        color = "#c62828"
                 
                 st.markdown(f"""
                 <div style="padding: 20px; border-radius: 5px; background-color: #f0f7ff; margin-top: 20px;">
                     <h3>Prediction Result</h3>
-                    <h2 style="color: {color};">{score:.2f}</h2>
+                    <h2 style="color: {color};">{value:.2f}</h2>
                     <p>Binding Quality: <strong>{quality}</strong></p>
-                    <p>ANOVA Threshold: -6676.38</p>
+                    <p>{"ANOVA Threshold: -6633.01" if prediction_type == "Score" else "Lower RMSD indicates better structural fit"}</p>
                 </div>
                 """, unsafe_allow_html=True)
             else:
@@ -666,12 +763,12 @@ elif page == "Generation Tool":
                 )
                 
                 # Generate predictions for each sequence
-                predictions = [predict_ml_score(seq).get("RMSD_prediction") for seq in generated_sequences]
+                predictions = [predict_ml_score(seq, prediction_type).get("prediction") for seq in generated_sequences]
                 
                 # Create dataframe
                 st.session_state.generated_data = pd.DataFrame({
                     "Generated Sequence": generated_sequences,
-                    "Predicted RMSD Score": predictions
+                    f"Predicted {prediction_type}": predictions
                 })
         
         # Display generated sequences
@@ -679,28 +776,36 @@ elif page == "Generation Tool":
             df_gen = st.session_state.generated_data
             
             # Add quality column
-            def get_quality(score):
-                if score < -6900:
-                    return "Strong Binder"
-                elif score < -6676.38:
-                    return "Good Binder"
+            def get_quality(value):
+                if prediction_type == "Score":
+                    if value < -6900:
+                        return "Strong Binder"
+                    elif value < -6633.01:
+                        return "Good Binder"
+                    else:
+                        return "Poor Binder"
                 else:
-                    return "Poor Binder"
+                    if value < 150:
+                        return "Excellent Fit"
+                    elif value < 200:
+                        return "Good Fit"
+                    else:
+                        return "Poor Fit"
                 
-            df_gen["Binding Quality"] = df_gen["Predicted RMSD Score"].apply(get_quality)
+            df_gen["Binding Quality"] = df_gen[f"Predicted {prediction_type}"].apply(get_quality)
             
             # Style dataframe
             def highlight_quality(val):
-                if val == "Strong Binder":
+                if val in ["Strong Binder", "Excellent Fit"]:
                     return 'background-color: #c8e6c9; color: #2e7d32'
-                elif val == "Good Binder":
+                elif val in ["Good Binder", "Good Fit"]:
                     return 'background-color: #bbdefb; color: #1565c0'
                 else:
                     return 'background-color: #ffcdd2; color: #c62828'
             
             # Format and display
             styled_df = df_gen.style.format({
-                "Predicted RMSD Score": "{:.2f}"
+                f"Predicted {prediction_type}": "{:.2f}"
             }).applymap(highlight_quality, subset=["Binding Quality"])
             
             st.dataframe(styled_df, use_container_width=True)
@@ -713,7 +818,7 @@ elif page == "Generation Tool":
                 selected_idx = st.selectbox(
                     "Select sequence to analyze:",
                     options=range(len(df_gen)),
-                    format_func=lambda x: f"Sequence {x+1} (Score: {df_gen['Predicted RMSD Score'].iloc[x]:.2f})"
+                    format_func=lambda x: f"Sequence {x+1} ({prediction_type}: {df_gen[f'Predicted {prediction_type}'].iloc[x]:.2f})"
                 )
                 
                 selected_seq = df_gen["Generated Sequence"].iloc[selected_idx]
@@ -794,18 +899,37 @@ elif page == "Dataset Insights":
     with tab1:
         # Display sample data
         st.markdown("### Sample RNA Sequences")
-        st.dataframe(df[['RNA_Name', 'Score', 'RNA_Sequence']].head(10), use_container_width=True)
+        display_cols = ['RNA_Name', 'RNA_Sequence']
+        if 'Score' in df.columns:
+            display_cols.insert(1, 'Score')
+        if 'RMSD' in df.columns:
+            display_cols.insert(2, 'RMSD')
+        
+        st.dataframe(df[display_cols].head(10), use_container_width=True)
         
         # Distribution of binding scores
-        st.markdown("### Distribution of Binding Scores")
-        fig, ax = plt.subplots(figsize=(12, 6))
-        sns.histplot(df['Score'], kde=True, ax=ax, color='#4287f5')
-        ax.axvline(x=-6676.38, color='red', linestyle='--', label='ANOVA Threshold')
-        ax.set_xlabel("Binding Score", fontsize=12)
-        ax.set_ylabel("Frequency", fontsize=12)
-        ax.legend(fontsize=10)
-        ax.set_title("Distribution of RNA-Protein Binding Scores", fontsize=14)
-        st.pyplot(fig)
+        if 'Score' in df.columns:
+            st.markdown("### Distribution of Binding Scores")
+            fig, ax = plt.subplots(figsize=(12, 6))
+            scores = df['Score'].dropna()
+            sns.histplot(scores, kde=True, ax=ax, color='#4287f5')
+            ax.axvline(x=-6633.01, color='red', linestyle='--', label='ANOVA Threshold')
+            ax.set_xlabel("Binding Score", fontsize=12)
+            ax.set_ylabel("Frequency", fontsize=12)
+            ax.legend(fontsize=10)
+            ax.set_title("Distribution of RNA-Protein Binding Scores", fontsize=14)
+            st.pyplot(fig)
+        
+        # Distribution of RMSD values
+        if 'RMSD' in df.columns:
+            st.markdown("### Distribution of RMSD Values")
+            fig, ax = plt.subplots(figsize=(12, 6))
+            rmsds = df['RMSD'].dropna()
+            sns.histplot(rmsds, kde=True, ax=ax, color='#f54287')
+            ax.set_xlabel("RMSD", fontsize=12)
+            ax.set_ylabel("Frequency", fontsize=12)
+            ax.set_title("Distribution of RMSD Values", fontsize=14)
+            st.pyplot(fig)
             
     with tab2:
         st.markdown("### Key Binding Factors")
@@ -857,29 +981,35 @@ elif page == "Dataset Insights":
         st.pyplot(fig)
         
         # Correlation analysis
-        st.markdown("### Correlation Between Features and Binding")
-        
-        # Create a plot showing correlation between C content and binding score
-        # For this example we'll generate synthetic data
-        np.random.seed(42)
-        n_samples = 100
-        c_content = np.random.uniform(10, 40, n_samples)
-        # Generate binding scores with negative correlation to C content
-        binding_scores = -7000 - 20 * c_content + np.random.normal(0, 300, n_samples)
-        
-        corr_df = pd.DataFrame({
-            'C Content (%)': c_content,
-            'Binding Score': binding_scores
-        })
-        
-        fig, ax = plt.subplots(figsize=(10, 6))
-        sns.scatterplot(x='C Content (%)', y='Binding Score', data=corr_df, ax=ax, alpha=0.7)
-        sns.regplot(x='C Content (%)', y='Binding Score', data=corr_df, ax=ax, 
-                   scatter=False, line_kws={"color": "red"})
-        ax.axhline(y=-6676.38, color='green', linestyle='--', label='ANOVA Threshold')
-        ax.set_title("Correlation Between Cytosine Content and Binding Affinity", fontsize=14)
-        ax.legend()
-        st.pyplot(fig)
+        if 'Score' in df.columns:
+            st.markdown("### Correlation Between Features and Binding")
+            
+            # Calculate actual GC content for the dataset
+            df['GC_Content'] = df['RNA_Sequence'].apply(
+                lambda x: (x.count('G') + x.count('C')) / len(x) * 100
+            )
+            df['C_Content'] = df['RNA_Sequence'].apply(
+                lambda x: x.count('C') / len(x) * 100
+            )
+            
+            # Create correlation plot
+            scores = df['Score'].dropna()
+            c_content = df.loc[scores.index, 'C_Content']
+            
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.scatter(c_content, scores, alpha=0.7)
+            ax.axhline(y=-6633.01, color='green', linestyle='--', label='ANOVA Threshold')
+            
+            # Add trend line
+            z = np.polyfit(c_content, scores, 1)
+            p = np.poly1d(z)
+            ax.plot(c_content, p(c_content), "r--", alpha=0.8)
+            
+            ax.set_xlabel("Cytosine Content (%)", fontsize=12)
+            ax.set_ylabel("Binding Score", fontsize=12)
+            ax.set_title("Correlation Between Cytosine Content and Binding Affinity", fontsize=14)
+            ax.legend()
+            st.pyplot(fig)
         
     with tab3:
         st.markdown("### Common Motifs in Strong Binding Sequences")
@@ -957,8 +1087,8 @@ elif page == "Dataset Insights":
         st.pyplot(fig)
 
 # Footer
-st.markdown("""
+st.markdown(f"""
 <div class="footer">
-    <p>RNA-Protein Binding Prediction Tool | Model based on ANOVA threshold: -6676.38 | © 2025</p>
+    <p>RNA-Protein Binding Prediction Tool | Model based on ANOVA threshold: -6633.01 | © 2025</p>
 </div>
 """, unsafe_allow_html=True)
