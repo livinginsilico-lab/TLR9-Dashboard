@@ -38,7 +38,7 @@ def analyze_rna_data(data_path='master_rna_data.csv', output_dir='data_analysis'
         # Plot score distribution
         plt.figure(figsize=(10, 6))
         plt.hist(scores, bins=50, edgecolor='black', alpha=0.7)
-        plt.axvline(x=-6633.01, color='red', linestyle='--', label='ANOVA Threshold (-6633.01)')
+        plt.axvline(x=-6644.01, color='red', linestyle='--', label='ANOVA Threshold (-6644.01)')
         plt.xlabel('Binding Score')
         plt.ylabel('Frequency')
         plt.title('Distribution of RNA Binding Scores')
@@ -47,8 +47,8 @@ def analyze_rna_data(data_path='master_rna_data.csv', output_dir='data_analysis'
         plt.close()
         
         # Count strong binders
-        strong_binders = (scores < -6633.01).sum()
-        print(f"\nStrong binders (Score < -6633.01): {strong_binders} ({strong_binders/len(scores)*100:.1f}%)")
+        strong_binders = (scores < -6644.01).sum()
+        print(f"\nStrong binders (Score < -6644.01): {strong_binders} ({strong_binders/len(scores)*100:.1f}%)")
     
     # RMSD analysis
     if 'RMSD' in df.columns:
