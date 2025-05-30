@@ -266,10 +266,10 @@ def generate_insights(sequence, score, prediction_type="Score"):
     
     if prediction_type == "Score":
         # Updated threshold
-        if score < -6633.01:
-            insights.append("✅ Good binder (below ANOVA threshold of -6633.01)")
+        if score < -6644.01:
+            insights.append("✅ Good binder (below ANOVA threshold of -6644.01)")
         else:
-            insights.append("⚠️ Poor binder (above ANOVA threshold of -6633.01)")
+            insights.append("⚠️ Poor binder (above ANOVA threshold of -6644.01)")
         
         # Content insights
         if features['c_percent'] > 25:
@@ -454,7 +454,7 @@ if page == "Home":
         scores = df['Score'].dropna()
         
         sns.histplot(scores, kde=True, color='skyblue', ax=ax)
-        ax.axvline(x=-6633.01, color='red', linestyle='--', label='ANOVA Threshold')
+        ax.axvline(x=-6644.01, color='red', linestyle='--', label='ANOVA Threshold')
         ax.set_xlabel("Binding Score")
         ax.set_ylabel("Count")
         ax.set_title("Distribution of Binding Scores")
@@ -474,7 +474,7 @@ elif page == "Sequence Analyzer":
         4. View results including binding score/RMSD, sequence features, and insights
         
         The analyzer evaluates factors like cytosine content and GC content to predict binding affinity.
-        Scores below -6633.01 indicate good binding affinity.
+        Scores below -6644.01 indicate good binding affinity.
         """)
     
     # Input area with improved styling
@@ -549,7 +549,7 @@ elif page == "Sequence Analyzer":
                 
                 # Binding threshold
                 if prediction_type == "Score":
-                    threshold = -6633.01
+                    threshold = -6644.01
                     is_good_binder = value < threshold
                     binder_quality = "Good" if is_good_binder else "Poor"
                     
@@ -558,7 +558,7 @@ elif page == "Sequence Analyzer":
                     <div class="metric-card">
                         <h4>Binding Quality</h4>
                         <h2 style="color:{qualityColor};">{binder_quality}</h2>
-                        <p>Threshold: -6633.01 (ANOVA)</p>
+                        <p>Threshold: -6644.01 (ANOVA)</p>
                     </div>
                     """, unsafe_allow_html=True)
             
@@ -714,7 +714,7 @@ elif page == "Generation Tool":
                     if value < -6900:
                         quality = "Strong Binder"
                         color = "#2e7d32"
-                    elif value < -6633.01:
+                    elif value < -6644.01:
                         quality = "Good Binder"
                         color = "#1E88E5"
                     else:
@@ -736,7 +736,7 @@ elif page == "Generation Tool":
                     <h3>Prediction Result</h3>
                     <h2 style="color: {color};">{value:.2f}</h2>
                     <p>Binding Quality: <strong>{quality}</strong></p>
-                    <p>{"ANOVA Threshold: -6633.01" if prediction_type == "Score" else "Lower RMSD indicates better structural fit"}</p>
+                    <p>{"ANOVA Threshold: -6644.01" if prediction_type == "Score" else "Lower RMSD indicates better structural fit"}</p>
                 </div>
                 """, unsafe_allow_html=True)
             else:
@@ -780,7 +780,7 @@ elif page == "Generation Tool":
                 if prediction_type == "Score":
                     if value < -6900:
                         return "Strong Binder"
-                    elif value < -6633.01:
+                    elif value < -6644.01:
                         return "Good Binder"
                     else:
                         return "Poor Binder"
@@ -913,7 +913,7 @@ elif page == "Dataset Insights":
             fig, ax = plt.subplots(figsize=(12, 6))
             scores = df['Score'].dropna()
             sns.histplot(scores, kde=True, ax=ax, color='#4287f5')
-            ax.axvline(x=-6633.01, color='red', linestyle='--', label='ANOVA Threshold')
+            ax.axvline(x=-6644.01, color='red', linestyle='--', label='ANOVA Threshold')
             ax.set_xlabel("Binding Score", fontsize=12)
             ax.set_ylabel("Frequency", fontsize=12)
             ax.legend(fontsize=10)
@@ -998,7 +998,7 @@ elif page == "Dataset Insights":
             
             fig, ax = plt.subplots(figsize=(10, 6))
             ax.scatter(c_content, scores, alpha=0.7)
-            ax.axhline(y=-6633.01, color='green', linestyle='--', label='ANOVA Threshold')
+            ax.axhline(y=-6644.01, color='green', linestyle='--', label='ANOVA Threshold')
             
             # Add trend line
             z = np.polyfit(c_content, scores, 1)
@@ -1089,6 +1089,6 @@ elif page == "Dataset Insights":
 # Footer
 st.markdown(f"""
 <div class="footer">
-    <p>RNA-Protein Binding Prediction Tool | Model based on ANOVA threshold: -6633.01 | © 2025</p>
+    <p>RNA-Protein Binding Prediction Tool | Model based on ANOVA threshold: -6644.01 | © 2025</p>
 </div>
 """, unsafe_allow_html=True)
