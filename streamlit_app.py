@@ -177,6 +177,8 @@ def setup_model_components():
         st.session_state.model_components_loaded = True
         st.session_state.model_loaded = False
         
+        # TEMPORARILY DISABLED - Testing if HuggingFace loading causes crashes
+        """
         try:
             # Use the fresh compressed model repository
             repo_id = 'HammadQ123/genai-compressed-final'
@@ -229,11 +231,20 @@ def setup_model_components():
             st.session_state.model_type = "feature_based"
             st.session_state.model_loaded = True
             st.session_state.tokenizer = None
+        """
+        
+        # TEMPORARY: Just use feature-based model
+        st.session_state.model_type = "feature_based"
+        st.session_state.model_loaded = True
+        st.session_state.tokenizer = None
+        st.info("🔧 ML model temporarily disabled for testing - using feature-based predictions")
 
 def predict_ml_score(sequence):
-    """ML prediction using compressed model"""
+    """ML prediction using compressed model - TEMPORARILY DISABLED"""
     setup_model_components()
     
+    # TEMPORARILY DISABLED - Just return feature-based prediction
+    """
     if not st.session_state.model_loaded:
         return {"RMSD_prediction": -7200, "confidence": "Low"}
     
@@ -260,35 +271,33 @@ def predict_ml_score(sequence):
             return {"RMSD_prediction": original_prediction, "confidence": "High"}
         
         else:
-            # Feature-based prediction fallback
-            features = extract_sequence_features(sequence)
-            base_score = -7200
-            
-            if features['c_percent'] > 25:
-                base_score -= random.uniform(100, 160)
-            elif features['c_percent'] < 18:
-                base_score += random.uniform(200, 300)
-            
-            if features['gc_content'] > 50:
-                base_score -= random.uniform(75, 125)
-                
-            if features['good_motifs']:
-                base_score -= len(features['good_motifs']) * random.uniform(50, 100)
-                
-            if features['problem_motifs']:
-                base_score += len(features['problem_motifs']) * random.uniform(75, 150)
-                
-            if features['ug_gu_density'] > 12:
-                base_score += random.uniform(100, 200)
-            
-            base_score += len(features['position_matches']) * random.uniform(25, 75)
-            base_score += random.normalvariate(0, 150)
-            
-            return {"RMSD_prediction": base_score, "confidence": "Medium"}
-            
-    except Exception as e:
-        st.error(f"Prediction error: {str(e)}")
-        return {"RMSD_prediction": -7200, "confidence": "Low"}
+    """
+    
+    # Feature-based prediction (temporarily the only option)
+    features = extract_sequence_features(sequence)
+    base_score = -7200
+    
+    if features['c_percent'] > 25:
+        base_score -= random.uniform(100, 160)
+    elif features['c_percent'] < 18:
+        base_score += random.uniform(200, 300)
+    
+    if features['gc_content'] > 50:
+        base_score -= random.uniform(75, 125)
+        
+    if features['good_motifs']:
+        base_score -= len(features['good_motifs']) * random.uniform(50, 100)
+        
+    if features['problem_motifs']:
+        base_score += len(features['problem_motifs']) * random.uniform(75, 150)
+        
+    if features['ug_gu_density'] > 12:
+        base_score += random.uniform(100, 200)
+    
+    base_score += len(features['position_matches']) * random.uniform(25, 75)
+    base_score += random.normalvariate(0, 150)
+    
+    return {"RMSD_prediction": base_score, "confidence": "Medium (ML disabled)"}
 
 def predict_binding(sequence):
     """Enhanced binding prediction"""
@@ -455,9 +464,10 @@ if page == "Home":
                 if os.path.exists("scaler.pkl"):
                     st.markdown("- ✅ scaler.pkl detected")
             else:
-                st.info("📊 Feature-Based Model Active")
+                st.info("📊 Feature-Based Model Active (ML Temporarily Disabled)")
                 st.markdown("- Enhanced feature predictions")
-                st.markdown("- Compressed ML model available")
+                st.markdown("- Testing app stability")
+                st.markdown("- ML model will be re-enabled once stable")
         else:
             st.error("❌ Model Loading Failed")
         
