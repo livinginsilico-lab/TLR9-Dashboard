@@ -272,71 +272,57 @@ def predict_ml_score(sequence):
     try:
         if st.session_state.model_type == "compressed" and st.session_state.tokenizer:
             # Use compressed ML model
-            try:
-                inputs = st.session_state.tokenizer(
-                    sequence, 
-                    return_tensors="pt", 
-                    padding=True, 
-                    truncation=True,
-                    max_length=512
-                )
-                
-                with torch.no_grad():
-                    # Make sure model is in eval mode
-                    st.session_state.model.eval()
-                    outputs = st.session_state.model(**inputs)
-                    
-                    # Extract prediction - handle different output formats
-                    if hasattr(outputs, 'logits'):
-                        scaled_prediction = outputs.logits.item()
-                    elif isinstance(outputs, torch.Tensor):
-                        scaled_prediction = outputs.item()
-                    else:
-                        # If outputs is a tuple or list, get the first element
-                        scaled_prediction = outputs[0].item()
-                
-                # Apply scaler if available
-                scaler_path = "scaler.pkl"
-                if os.path.exists(scaler_path):
-                    import pickle
-                    scaler = pickle.load(open(scaler_path, 'rb'))
-                    original_prediction = scaler.inverse_transform([[scaled_prediction]])[0][0]
-                else:
-                    # Approximate inverse scaling
-                    original_prediction = (scaled_prediction * 2000) - 7500
-                
-                return {"RMSD_prediction": original_prediction, "confidence": "High"}
-                
-            except Exception as model_error:
-                st.error(f"ML model error: {str(model_error)}")
-                # Fall back to feature-based prediction
-                pass
-        
-        # Feature-based prediction fallback
-        features = extract_sequence_features(sequence)
-        base_score = -7200
-        
-        if features['c_percent'] > 25:
-            base_score -= random.uniform(100, 160)
-        elif features['c_percent'] < 18:
-            base_score += random.uniform(200, 300)
-        
-        if features['gc_content'] > 50:
-            base_score -= random.uniform(75, 125)
+            inputs = st.session_state.tokenizer(
+                sequence, 
+                return_tensors="pt", 
+                padding=True, 
+                truncation=True,
+                max_length=512  # Add max length to prevent issues
+            )
             
-        if features['good_motifs']:
-            base_score -= len(features['good_motifs']) * random.uniform(50, 100)
+            with torch.no_grad():
+                outputs = st.session_state.model(**inputs).logits
             
-        if features['problem_motifs']:
-            base_score += len(features['problem_motifs']) * random.uniform(75, 150)
+            scaled_prediction = outputs.item()
             
-        if features['ug_gu_density'] > 12:
-            base_score += random.uniform(100, 200)
+            # Apply scaler if available
+            scaler_path = "scaler.pkl"
+            if os.path.exists(scaler_path):
+                import pickle
+                scaler = pickle.load(open(scaler_path, 'rb'))
+                original_prediction = scaler.inverse_transform([[scaled_prediction]])[0][0]
+            else:
+                # Approximate inverse scaling
+                original_prediction = (scaled_prediction * 2000) - 7500
+            
+            return {"RMSD_prediction": original_prediction, "confidence": "High"}
         
-        base_score += len(features['position_matches']) * random.uniform(25, 75)
-        base_score += random.normalvariate(0, 150)
-        
-        return {"RMSD_prediction": base_score, "confidence": "Medium (Feature-based fallback)"}
+        else:
+            # Feature-based prediction fallback
+            features = extract_sequence_features(sequence)
+            base_score = -7200
+            
+            if features['c_percent'] > 25:
+                base_score -= random.uniform(100, 160)
+            elif features['c_percent'] < 18:
+                base_score += random.uniform(200, 300)
+            
+            if features['gc_content'] > 50:
+                base_score -= random.uniform(75, 125)
+                
+            if features['good_motifs']:
+                base_score -= len(features['good_motifs']) * random.uniform(50, 100)
+                
+            if features['problem_motifs']:
+                base_score += len(features['problem_motifs']) * random.uniform(75, 150)
+                
+            if features['ug_gu_density'] > 12:
+                base_score += random.uniform(100, 200)
+            
+            base_score += len(features['position_matches']) * random.uniform(25, 75)
+            base_score += random.normalvariate(0, 150)
+            
+            return {"RMSD_prediction": base_score, "confidence": "Medium"}
             
     except Exception as e:
         st.error(f"Prediction error: {str(e)}")
