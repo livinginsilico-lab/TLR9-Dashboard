@@ -179,17 +179,47 @@ def setup_model_components():
         st.session_state.model_loaded = False
         
         try:
-            # Check for enhanced model
-            model_path = "updated_model.pt"
-            if os.path.exists(model_path):
+            # First, try to load from Hugging Face Hub
+            repo_id = 'HammadQ123/genai-predictor'
+            
+            try:
+                from huggingface_hub import hf_hub_download
+                import os
+                
+                # Download the model from Hugging Face Hub
+                st.info("🔄 Downloading enhanced model from Hugging Face Hub...")
+                model_path = hf_hub_download(
+                    repo_id=repo_id,
+                    filename="model_updated.pt",
+                    cache_dir="./model_cache"
+                )
+                
+                # Load the downloaded model
                 st.session_state.model = torch.load(model_path, map_location='cpu')
                 st.session_state.model_type = "enhanced"
                 st.session_state.model_loaded = True
-                st.success("Enhanced model loaded!")
-            else:
-                st.session_state.model_type = "placeholder"
-                st.session_state.model_loaded = True
-                st.info("Using enhanced feature-based model. Upload 'updated_model.pt' for ML predictions.")
+                st.success("🚀 Enhanced model loaded from Hugging Face Hub!")
+                
+            except Exception as hf_error:
+                st.warning(f"Could not load from Hugging Face: {str(hf_error)}")
+                
+                # Fallback: Check for local model file
+                local_model_paths = ["updated_model.pt", "model_updated.pt"]
+                model_found = False
+                
+                for model_path in local_model_paths:
+                    if os.path.exists(model_path):
+                        st.session_state.model = torch.load(model_path, map_location='cpu')
+                        st.session_state.model_type = "enhanced"
+                        st.session_state.model_loaded = True
+                        st.success(f"Enhanced model loaded from {model_path}!")
+                        model_found = True
+                        break
+                
+                if not model_found:
+                    st.session_state.model_type = "placeholder"
+                    st.session_state.model_loaded = True
+                    st.info("📊 Using enhanced feature-based model. Enhanced ML model available at: HammadQ123/genai-predictor")
                 
             # Load tokenizer
             tokenizer_path = "tokenizer"
@@ -200,7 +230,8 @@ def setup_model_components():
                 st.session_state.tokenizer = None
                 
         except Exception as e:
-            st.error(f"Error loading model: {str(e)}")
+            st.error(f"Error loading model components: {str(e)}")
+            st.session_state.model_loaded = False
 
 def predict_ml_score(sequence):
     """Enhanced ML prediction"""
@@ -427,10 +458,12 @@ if page == "Home":
             if st.session_state.model_type == "enhanced":
                 st.success("🚀 Enhanced ML Model Active")
                 st.markdown("- High accuracy predictions")
+                st.markdown("- Loaded from HuggingFace Hub")
                 st.markdown("- Uses scaler.pkl for proper scaling")
             else:
                 st.info("📊 Enhanced Feature Model Active")
                 st.markdown("- Feature-based predictions")
+                st.markdown("- ML model available at: HammadQ123/genai-predictor")
                 if os.path.exists("scaler.pkl"):
                     st.markdown("- ✅ scaler.pkl detected")
                 else:
@@ -1009,11 +1042,16 @@ elif page == "Dataset Insights":
             <h4>📊 Current Implementation Status</h4>
             <ul>
                 <li><strong>Dataset:</strong> 1,232 sequences with multi-pose analysis</li>
+                <li><strong>Enhanced Model:</strong> ✅ Available at HuggingFace (HammadQ123/genai-predictor)</li>
                 <li><strong>Scaler:</strong> ✅ Available (scaler.pkl)</li>
-                <li><strong>Model:</strong> 🔄 Enhanced feature-based (ML ready when updated_model.pt added)</li>
+                <li><strong>Auto-loading:</strong> ✅ Downloads model automatically from HuggingFace Hub</li>
                 <li><strong>Threshold:</strong> ✅ Updated to -7214.13 (multi-pose validated)</li>
                 <li><strong>Statistical rigor:</strong> ✅ Three-step validation methodology</li>
             </ul>
+            
+            <h4>🔗 Model Repository</h4>
+            <p><strong>HuggingFace Hub:</strong> <a href="https://huggingface.co/HammadQ123/genai-predictor" target="_blank">HammadQ123/genai-predictor</a></p>
+            <p>The model automatically downloads on first use and is cached locally for subsequent runs.</p>
         </div>
         """, unsafe_allow_html=True)
 
