@@ -301,12 +301,12 @@ def generate_insights(sequence, score):
     
     insights = []
     
-    # Updated threshold from new comprehensive analysis
+    # Updated threshold from new comprehensive multi-pose analysis
     threshold = -7214.13
     if score < threshold:
-        insights.append(f"✅ Good binder (below updated threshold of {threshold})")
+        insights.append(f"✅ Good binder (below multi-pose threshold of {threshold})")
     else:
-        insights.append(f"⚠️ Poor binder (above updated threshold of {threshold})")
+        insights.append(f"⚠️ Poor binder (above multi-pose threshold of {threshold})")
     
     explanations = generate_explanations(sequence, features)
     insights.extend(explanations)
@@ -438,11 +438,11 @@ if page == "Home":
         else:
             st.error("❌ Model Loading Failed")
         
-        # Updated threshold visualization
-        st.markdown('<h4>Updated Multi-Pose ANOVA Binding Threshold</h4>', unsafe_allow_html=True)
+        # Updated threshold visualization with new multi-pose analysis
+        st.markdown('<h4>Multi-Pose ANOVA Binding Threshold</h4>', unsafe_allow_html=True)
         fig, ax = plt.subplots(figsize=(6, 4))
         sns.histplot(df['Score'], kde=True, color='skyblue', ax=ax)
-        ax.axvline(x=-7214.13, color='red', linestyle='--', label='New Threshold (-7214.13)')
+        ax.axvline(x=-7214.13, color='red', linestyle='--', label='Multi-Pose Threshold (-7214.13)')
         ax.set_xlabel("Binding Score")
         ax.set_ylabel("Count")
         ax.set_title("Distribution (Multi-Pose Analysis)")
@@ -496,11 +496,11 @@ elif page == "Sequence Analyzer":
             
             insights = generate_insights(sequence, score)
             
-            # Binding strength classification with new threshold
+            # Binding strength classification with new multi-pose threshold
             if score < -7500:
                 binding_strength = "Exceptional"
                 strength_color = "#0D5016"
-            elif score < -7214.13:  # New threshold
+            elif score < -7214.13:  # New multi-pose threshold
                 binding_strength = "Excellent"
                 strength_color = "#1B5E20"
             elif score < -7000:
@@ -1021,5 +1021,5 @@ elif page == "Dataset Insights":
 st.markdown("""
 ---
 ### 🧬 Enhanced RNA-Protein Binding Prediction Tool
-Built with enhanced statistical analysis | Updated ANOVA threshold: -6644.01 | Model accuracy: 85%+
+Built with comprehensive multi-pose statistical analysis | Multi-pose threshold: -7214.13 | F-statistic: 8.8565 (p < 0.0001)
 """, unsafe_allow_html=True)
