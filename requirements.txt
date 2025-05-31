@@ -6,9 +6,9 @@ seaborn
 torch
 transformers
 scikit-learn
-joblib>=1.3.0
-tqdm>=4.65.0
-plotly>=5.17.0
-openpyxl>=3.1.0
-scipy>=1.11.0
+joblib
+tqdm
+plotly
+openpyxl
+scipy
 huggingface_hub
