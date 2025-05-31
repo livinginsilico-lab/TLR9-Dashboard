@@ -173,96 +173,66 @@ def generate_explanations(sequence, features):
 
 # Setup enhanced ML model
 def setup_model_components():
-    """Setup ML model components with compressed model support"""
+    """Setup ML model components with compressed model only"""
     if 'model_components_loaded' not in st.session_state:
         st.session_state.model_components_loaded = True
         st.session_state.model_loaded = False
         
         try:
             repo_id = 'HammadQ123/genai-predictor'
-            model_loaded = False
             
             try:
                 from huggingface_hub import hf_hub_download
                 import os
                 
-                # Prioritize compressed models for faster loading and less memory usage
-                model_priority = [
-                    ("model_compressed.pt", "Compressed (0.57GB)"),
-                    ("model_quantized.pt", "Quantized"),
-                    ("model_updated.pt", "Original (3.5GB)")
-                ]
+                # ONLY use the compressed model - no other options
+                compressed_filename = "model_compressed.pt"
                 
-                with st.spinner("🔄 Loading enhanced model from Hugging Face Hub..."):
-                    for filename, description in model_priority:
-                        try:
-                            st.info(f"📦 Trying {description} model: {filename}")
-                            
-                            model_path = hf_hub_download(
-                                repo_id=repo_id,
-                                filename=filename,
-                                cache_dir="./model_cache"
-                            )
-                            
-                            # Load the model
-                            st.info(f"🔧 Loading model into memory...")
-                            st.session_state.model = torch.load(model_path, map_location='cpu')
-                            st.session_state.model_type = "enhanced"
-                            st.session_state.model_loaded = True
-                            
-                            # Show success message based on model type
-                            if "compressed" in filename:
-                                st.success(f"🚀 Compressed model loaded! ({description}) - Optimized for speed and memory!")
-                            elif "quantized" in filename:
-                                st.success(f"🚀 Quantized model loaded! ({description})")
-                            else:
-                                st.success(f"🚀 Original model loaded! ({description})")
-                            
-                            model_loaded = True
-                            break
-                            
-                        except Exception as file_error:
-                            st.warning(f"Could not load {filename}: {str(file_error)}")
-                            continue
-                
-                if not model_loaded:
-                    raise Exception("No compatible model file found in HuggingFace repository")
+                with st.spinner("🔄 Loading compressed model from Hugging Face Hub..."):
+                    st.info(f"📦 Downloading compressed model: {compressed_filename} (0.57GB)")
+                    
+                    model_path = hf_hub_download(
+                        repo_id=repo_id,
+                        filename=compressed_filename,
+                        cache_dir="./model_cache"
+                    )
+                    
+                    # Load the compressed model
+                    st.info(f"🔧 Loading compressed model into memory...")
+                    st.session_state.model = torch.load(model_path, map_location='cpu')
+                    st.session_state.model_type = "enhanced"
+                    st.session_state.model_loaded = True
+                    
+                    st.success(f"🚀 Compressed model loaded successfully! (0.57GB - 84% size reduction)")
                 
             except ImportError:
                 st.warning("HuggingFace Hub not available. Install with: pip install huggingface_hub")
-                # Fallback to feature model
+                # Fallback to feature model only
                 st.session_state.model_type = "placeholder"
                 st.session_state.model_loaded = True
                 st.info("📊 Using enhanced feature-based model")
                 
             except Exception as hf_error:
-                st.warning(f"Could not load from Hugging Face: {str(hf_error)}")
+                st.warning(f"Could not load compressed model from HuggingFace: {str(hf_error)}")
                 
-                # Check for local model files as fallback
-                local_model_paths = [
-                    "model_compressed.pt", 
-                    "model_quantized.pt", 
-                    "updated_model.pt", 
-                    "model_updated.pt"
-                ]
+                # Check for local compressed model file only
+                local_compressed_path = "model_compressed.pt"
                 
-                for model_path in local_model_paths:
-                    if os.path.exists(model_path):
-                        try:
-                            st.session_state.model = torch.load(model_path, map_location='cpu')
-                            st.session_state.model_type = "enhanced"
-                            st.session_state.model_loaded = True
-                            st.success(f"Enhanced model loaded from local file: {model_path}!")
-                            model_loaded = True
-                            break
-                        except Exception as load_error:
-                            st.warning(f"Could not load {model_path}: {str(load_error)}")
-                            continue
-                
-                if not model_loaded:
+                if os.path.exists(local_compressed_path):
+                    try:
+                        st.session_state.model = torch.load(local_compressed_path, map_location='cpu')
+                        st.session_state.model_type = "enhanced"
+                        st.session_state.model_loaded = True
+                        st.success(f"🚀 Compressed model loaded from local file!")
+                    except Exception as load_error:
+                        st.warning(f"Could not load local compressed model: {str(load_error)}")
+                        st.session_state.model_type = "placeholder"
+                        st.session_state.model_loaded = True
+                        st.info("📊 Using enhanced feature-based model")
+                else:
                     st.session_state.model_type = "placeholder"
                     st.session_state.model_loaded = True
-                    st.info("📊 Using enhanced feature-based model. Compressed ML model available at: HammadQ123/genai-predictor")
+                    st.info("📊 Using enhanced feature-based model. Compressed model available at: HammadQ123/genai-predictor")
                 
             # Load tokenizer
             tokenizer_path = "tokenizer"
@@ -277,7 +247,8 @@ def setup_model_components():
                     st.session_state.tokenizer = None
             else:
                 st.session_state.tokenizer = None
-                st.warning("Tokenizer directory not found. Some features may be limited.")
+                if st.session_state.model_type == "enhanced":
+                    st.warning("Tokenizer directory not found. Some features may be limited.")
                 
         except Exception as e:
             st.error(f"Error in model setup: {str(e)}")
@@ -1097,19 +1068,19 @@ elif page == "Dataset Insights":
             <h4>📊 Current Implementation Status</h4>
             <ul>
                 <li><strong>Dataset:</strong> 1,232 sequences with multi-pose analysis</li>
-                <li><strong>Compressed Model:</strong> ✅ Available at HuggingFace (0.57GB - 84% size reduction)</li>
-                <li><strong>Model Files:</strong> model_compressed.pt (prioritized), model_updated.pt (fallback)</li>
+                <li><strong>Model:</strong> ✅ model_compressed.pt ONLY (0.57GB - optimized deployment)</li>
+                <li><strong>Size reduction:</strong> 84% smaller than original (3.5GB → 0.57GB)</li>
                 <li><strong>Scaler:</strong> ✅ Available (scaler.pkl)</li>
                 <li><strong>Auto-loading:</strong> ✅ Downloads compressed model automatically</li>
                 <li><strong>Threshold:</strong> ✅ Updated to -7214.13 (multi-pose validated)</li>
                 <li><strong>Statistical rigor:</strong> ✅ Three-step validation methodology</li>
-                <li><strong>Performance:</strong> ✅ Fast loading, memory efficient</li>
+                <li><strong>Performance:</strong> ✅ Fast loading, memory efficient, crash-free</li>
             </ul>
             
             <h4>🔗 Model Repository</h4>
             <p><strong>HuggingFace Hub:</strong> <a href="https://huggingface.co/HammadQ123/genai-predictor" target="_blank">HammadQ123/genai-predictor</a></p>
-            <p><strong>Compressed Model:</strong> model_compressed.pt (0.57GB - optimized for deployment)</p>
-            <p>The compressed model automatically downloads on first use and provides the same accuracy as the original with 84% less memory usage.</p>
+            <p><strong>Production Model:</strong> model_compressed.pt (0.57GB - single optimized version)</p>
+            <p>The compressed model is the only model used in production, providing full ML accuracy with maximum efficiency and stability.</p>
         </div>
         """, unsafe_allow_html=True)
 
