@@ -181,46 +181,47 @@ def setup_model_components():
         try:
             # First, try to load from Hugging Face Hub
             repo_id = 'HammadQ123/genai-predictor'
+            model_loaded = False
             
             try:
                 from huggingface_hub import hf_hub_download
                 import os
                 
                 # Download the model from Hugging Face Hub
-                st.info("🔄 Downloading enhanced model from Hugging Face Hub...")
+                with st.spinner("🔄 Downloading enhanced model from Hugging Face Hub..."):
+                    # Try different possible filenames
+                    possible_filenames = ["model_updated.pt", "updated_model.pt", "pytorch_model.bin"]
+                    
+                    for filename in possible_filenames:
+                        try:
+                            model_path = hf_hub_download(
+                                repo_id=repo_id,
+                                filename=filename,
+                                cache_dir="./model_cache"
+                            )
+                            
+                            # Load the downloaded model
+                            st.session_state.model = torch.load(model_path, map_location='cpu')
+                            st.session_state.model_type = "enhanced"
+                            st.session_state.model_loaded = True
+                            st.success(f"🚀 Enhanced model loaded from Hugging Face Hub! (File: {filename})")
+                            model_loaded = True
+                            break
+                            
+                        except Exception as file_error:
+                            continue
                 
-                # Try different possible filenames
-                possible_filenames = ["model_updated.pt", "updated_model.pt", "pytorch_model.bin"]
-                model_path = None
+                if not model_loaded:
+                    raise Exception("No compatible model file found in HuggingFace repository")
                 
-                for filename in possible_filenames:
-                    try:
-                        model_path = hf_hub_download(
-                            repo_id=repo_id,
-                            filename=filename,
-                            cache_dir="./model_cache"
-                        )
-                        st.success(f"✅ Found model file: {filename}")
-                        break
-                    except Exception as e:
-                        st.warning(f"Could not find {filename}: {str(e)}")
-                        continue
-                
-                if model_path:
-                    # Load the downloaded model
-                    st.session_state.model = torch.load(model_path, map_location='cpu')
-                    st.session_state.model_type = "enhanced"
-                    st.session_state.model_loaded = True
-                    st.success("🚀 Enhanced model loaded from Hugging Face Hub!")
-                else:
-                    raise Exception("No compatible model file found in repository")
-                
+            except ImportError:
+                st.warning("HuggingFace Hub not available. Install with: pip install huggingface_hub")
+                raise Exception("HuggingFace Hub not installed")
             except Exception as hf_error:
                 st.warning(f"Could not load from Hugging Face: {str(hf_error)}")
                 
                 # Fallback: Check for local model file
                 local_model_paths = ["updated_model.pt", "model_updated.pt"]
-                model_found = False
                 
                 for model_path in local_model_paths:
                     if os.path.exists(model_path):
@@ -228,10 +229,10 @@ def setup_model_components():
                         st.session_state.model_type = "enhanced"
                         st.session_state.model_loaded = True
                         st.success(f"Enhanced model loaded from {model_path}!")
-                        model_found = True
+                        model_loaded = True
                         break
                 
-                if not model_found:
+                if not model_loaded:
                     st.session_state.model_type = "placeholder"
                     st.session_state.model_loaded = True
                     st.info("📊 Using enhanced feature-based model. Enhanced ML model available at: HammadQ123/genai-predictor")
@@ -239,14 +240,24 @@ def setup_model_components():
             # Load tokenizer
             tokenizer_path = "tokenizer"
             if os.path.exists(tokenizer_path):
-                from transformers import AutoTokenizer
-                st.session_state.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+                try:
+                    from transformers import AutoTokenizer
+                    st.session_state.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+                except ImportError:
+                    st.warning("Transformers library not available. Install with: pip install transformers")
+                    st.session_state.tokenizer = None
+                except Exception as tok_error:
+                    st.warning(f"Could not load tokenizer: {str(tok_error)}")
+                    st.session_state.tokenizer = None
             else:
                 st.session_state.tokenizer = None
                 
         except Exception as e:
-            st.error(f"Error loading model components: {str(e)}")
-            st.session_state.model_loaded = False
+            st.error(f"Error in model setup: {str(e)}")
+            # Ensure we always have a fallback
+            st.session_state.model_type = "placeholder"
+            st.session_state.model_loaded = True
+            st.session_state.tokenizer = None
 
 def predict_ml_score(sequence):
     """Enhanced ML prediction"""
