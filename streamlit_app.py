@@ -173,69 +173,83 @@ def generate_explanations(sequence, features):
 
 # Setup enhanced ML model
 def setup_model_components():
-    """Setup ML model components"""
+    """Setup ML model components with large model handling"""
     if 'model_components_loaded' not in st.session_state:
         st.session_state.model_components_loaded = True
         st.session_state.model_loaded = False
         
         try:
-            # First, try to load from Hugging Face Hub
-            repo_id = 'HammadQ123/genai-predictor'
-            model_loaded = False
+            # Check available memory and decide loading strategy
+            import psutil
+            available_memory_gb = psutil.virtual_memory().available / (1024**3)
             
-            try:
-                from huggingface_hub import hf_hub_download
-                import os
+            if available_memory_gb < 6:  # Less than 6GB available
+                st.warning(f"⚠️ Limited memory detected ({available_memory_gb:.1f}GB). Using HuggingFace API mode to avoid crashes.")
                 
-                # Download the model from Hugging Face Hub
-                with st.spinner("🔄 Downloading enhanced model from Hugging Face Hub..."):
-                    # Try different possible filenames
-                    possible_filenames = ["model_updated.pt", "updated_model.pt", "pytorch_model.bin"]
-                    
-                    for filename in possible_filenames:
-                        try:
-                            model_path = hf_hub_download(
-                                repo_id=repo_id,
-                                filename=filename,
-                                cache_dir="./model_cache"
-                            )
-                            
-                            # Load the downloaded model
-                            st.session_state.model = torch.load(model_path, map_location='cpu')
-                            st.session_state.model_type = "enhanced"
-                            st.session_state.model_loaded = True
-                            st.success(f"🚀 Enhanced model loaded from Hugging Face Hub! (File: {filename})")
-                            model_loaded = True
-                            break
-                            
-                        except Exception as file_error:
-                            continue
-                
-                if not model_loaded:
-                    raise Exception("No compatible model file found in HuggingFace repository")
-                
-            except ImportError:
-                st.warning("HuggingFace Hub not available. Install with: pip install huggingface_hub")
-                raise Exception("HuggingFace Hub not installed")
-            except Exception as hf_error:
-                st.warning(f"Could not load from Hugging Face: {str(hf_error)}")
-                
-                # Fallback: Check for local model file
-                local_model_paths = ["updated_model.pt", "model_updated.pt"]
-                
-                for model_path in local_model_paths:
-                    if os.path.exists(model_path):
-                        st.session_state.model = torch.load(model_path, map_location='cpu')
-                        st.session_state.model_type = "enhanced"
-                        st.session_state.model_loaded = True
-                        st.success(f"Enhanced model loaded from {model_path}!")
-                        model_loaded = True
-                        break
-                
-                if not model_loaded:
+                # Use HuggingFace Inference API instead of downloading
+                try:
+                    from huggingface_hub import InferenceClient
+                    st.session_state.model_type = "huggingface_api"
+                    st.session_state.model_loaded = True
+                    st.info("🌐 Using HuggingFace Inference API (no local download needed)")
+                except ImportError:
+                    st.warning("HuggingFace Hub not available. Using feature-based model.")
                     st.session_state.model_type = "placeholder"
                     st.session_state.model_loaded = True
-                    st.info("📊 Using enhanced feature-based model. Enhanced ML model available at: HammadQ123/genai-predictor")
+            else:
+                # Try to download model if enough memory
+                repo_id = 'HammadQ123/genai-predictor'
+                model_loaded = False
+                
+                try:
+                    from huggingface_hub import hf_hub_download
+                    import os
+                    
+                    # Look for quantized version first
+                    quantized_filenames = ["model_quantized.pt", "model_updated_quantized.pt"]
+                    regular_filenames = ["model_updated.pt", "updated_model.pt"]
+                    
+                    all_filenames = quantized_filenames + regular_filenames
+                    
+                    with st.spinner("🔄 Checking for model files..."):
+                        for filename in all_filenames:
+                            try:
+                                model_path = hf_hub_download(
+                                    repo_id=repo_id,
+                                    filename=filename,
+                                    cache_dir="./model_cache"
+                                )
+                                
+                                st.info(f"📦 Loading model: {filename}")
+                                st.session_state.model = torch.load(model_path, map_location='cpu')
+                                st.session_state.model_type = "enhanced"
+                                st.session_state.model_loaded = True
+                                
+                                if "quantized" in filename:
+                                    st.success(f"🚀 Quantized model loaded! (File: {filename})")
+                                else:
+                                    st.success(f"🚀 Full model loaded! (File: {filename})")
+                                model_loaded = True
+                                break
+                                
+                            except Exception as file_error:
+                                continue
+                    
+                    if not model_loaded:
+                        raise Exception("No compatible model file found")
+                    
+                except Exception as hf_error:
+                    st.warning(f"Could not load model: {str(hf_error)}")
+                    # Fallback to API mode
+                    try:
+                        from huggingface_hub import InferenceClient
+                        st.session_state.model_type = "huggingface_api"
+                        st.session_state.model_loaded = True
+                        st.info("🌐 Fallback: Using HuggingFace Inference API")
+                    except ImportError:
+                        st.session_state.model_type = "placeholder"
+                        st.session_state.model_loaded = True
+                        st.info("📊 Using enhanced feature-based model")
                 
             # Load tokenizer
             tokenizer_path = "tokenizer"
@@ -243,18 +257,19 @@ def setup_model_components():
                 try:
                     from transformers import AutoTokenizer
                     st.session_state.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
-                except ImportError:
-                    st.warning("Transformers library not available. Install with: pip install transformers")
-                    st.session_state.tokenizer = None
                 except Exception as tok_error:
                     st.warning(f"Could not load tokenizer: {str(tok_error)}")
                     st.session_state.tokenizer = None
             else:
                 st.session_state.tokenizer = None
                 
+        except ImportError:
+            # psutil not available, use conservative approach
+            st.session_state.model_type = "placeholder"
+            st.session_state.model_loaded = True
+            st.info("📊 Using enhanced feature-based model (memory check unavailable)")
         except Exception as e:
             st.error(f"Error in model setup: {str(e)}")
-            # Ensure we always have a fallback
             st.session_state.model_type = "placeholder"
             st.session_state.model_loaded = True
             st.session_state.tokenizer = None
@@ -268,7 +283,7 @@ def predict_ml_score(sequence):
     
     try:
         if st.session_state.model_type == "enhanced" and st.session_state.tokenizer:
-            # Use actual ML model
+            # Use actual ML model (local)
             inputs = st.session_state.tokenizer(sequence, return_tensors="pt", padding=True, truncation=True)
             
             with torch.no_grad():
@@ -287,33 +302,68 @@ def predict_ml_score(sequence):
                 original_prediction = (scaled_prediction * 2000) - 7500
             
             return {"RMSD_prediction": original_prediction, "confidence": "High"}
-        else:
-            # Enhanced feature-based prediction
-            features = extract_sequence_features(sequence)
-            base_score = -7200
-            
-            # Apply insights from your notebook
-            if features['c_percent'] > 25:
-                base_score -= random.uniform(100, 160)
-            elif features['c_percent'] < 18:
-                base_score += random.uniform(200, 300)
-            
-            if features['gc_content'] > 50:
-                base_score -= random.uniform(75, 125)
+        
+        elif st.session_state.model_type == "huggingface_api":
+            # Use HuggingFace Inference API (no local download needed)
+            try:
+                from huggingface_hub import InferenceClient
                 
-            if features['good_motifs']:
-                base_score -= len(features['good_motifs']) * random.uniform(50, 100)
+                client = InferenceClient(model="HammadQ123/genai-predictor")
                 
-            if features['problem_motifs']:
-                base_score += len(features['problem_motifs']) * random.uniform(75, 150)
-                
-            if features['ug_gu_density'] > 12:
-                base_score += random.uniform(100, 200)
+                # Tokenize sequence for API
+                if st.session_state.tokenizer:
+                    inputs = st.session_state.tokenizer(sequence, return_tensors="pt", padding=True, truncation=True)
+                    input_ids = inputs['input_ids'].tolist()[0]
+                    
+                    # Call HuggingFace API
+                    result = client.text_classification({"inputs": input_ids})
+                    
+                    # Extract prediction (adjust based on your model's output format)
+                    scaled_prediction = result[0]['score'] if isinstance(result, list) else result['score']
+                    
+                    # Apply scaler
+                    scaler_path = "scaler.pkl"
+                    if os.path.exists(scaler_path):
+                        import pickle
+                        scaler = pickle.load(open(scaler_path, 'rb'))
+                        original_prediction = scaler.inverse_transform([[scaled_prediction]])[0][0]
+                    else:
+                        original_prediction = (scaled_prediction * 2000) - 7500
+                    
+                    return {"RMSD_prediction": original_prediction, "confidence": "High"}
+                else:
+                    raise Exception("Tokenizer not available for API call")
+                    
+            except Exception as api_error:
+                st.warning(f"HuggingFace API error: {str(api_error)}")
+                # Fall through to feature-based prediction
+        
+        # Enhanced feature-based prediction (fallback)
+        features = extract_sequence_features(sequence)
+        base_score = -7200
+        
+        # Apply insights from your notebook
+        if features['c_percent'] > 25:
+            base_score -= random.uniform(100, 160)
+        elif features['c_percent'] < 18:
+            base_score += random.uniform(200, 300)
+        
+        if features['gc_content'] > 50:
+            base_score -= random.uniform(75, 125)
             
-            base_score += len(features['position_matches']) * random.uniform(25, 75)
-            base_score += random.normalvariate(0, 150)
+        if features['good_motifs']:
+            base_score -= len(features['good_motifs']) * random.uniform(50, 100)
             
-            return {"RMSD_prediction": base_score, "confidence": "Medium"}
+        if features['problem_motifs']:
+            base_score += len(features['problem_motifs']) * random.uniform(75, 150)
+            
+        if features['ug_gu_density'] > 12:
+            base_score += random.uniform(100, 200)
+        
+        base_score += len(features['position_matches']) * random.uniform(25, 75)
+        base_score += random.normalvariate(0, 150)
+        
+        return {"RMSD_prediction": base_score, "confidence": "Medium"}
             
     except Exception as e:
         st.error(f"Prediction error: {str(e)}")
