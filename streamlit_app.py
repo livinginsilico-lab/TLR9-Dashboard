@@ -188,17 +188,32 @@ def setup_model_components():
                 
                 # Download the model from Hugging Face Hub
                 st.info("🔄 Downloading enhanced model from Hugging Face Hub...")
-                model_path = hf_hub_download(
-                    repo_id=repo_id,
-                    filename="model_updated.pt",
-                    cache_dir="./model_cache"
-                )
                 
-                # Load the downloaded model
-                st.session_state.model = torch.load(model_path, map_location='cpu')
-                st.session_state.model_type = "enhanced"
-                st.session_state.model_loaded = True
-                st.success("🚀 Enhanced model loaded from Hugging Face Hub!")
+                # Try different possible filenames
+                possible_filenames = ["model_updated.pt", "updated_model.pt", "pytorch_model.bin"]
+                model_path = None
+                
+                for filename in possible_filenames:
+                    try:
+                        model_path = hf_hub_download(
+                            repo_id=repo_id,
+                            filename=filename,
+                            cache_dir="./model_cache"
+                        )
+                        st.success(f"✅ Found model file: {filename}")
+                        break
+                    except Exception as e:
+                        st.warning(f"Could not find {filename}: {str(e)}")
+                        continue
+                
+                if model_path:
+                    # Load the downloaded model
+                    st.session_state.model = torch.load(model_path, map_location='cpu')
+                    st.session_state.model_type = "enhanced"
+                    st.session_state.model_loaded = True
+                    st.success("🚀 Enhanced model loaded from Hugging Face Hub!")
+                else:
+                    raise Exception("No compatible model file found in repository")
                 
             except Exception as hf_error:
                 st.warning(f"Could not load from Hugging Face: {str(hf_error)}")
