@@ -212,17 +212,49 @@ def setup_model_components():
                 st.session_state.model_loaded = True
                 st.info("📊 Using feature-based predictions")
                 
-            # Load tokenizer
+            # Load tokenizer from local directory OR download from HuggingFace
+            tokenizer_loaded = False
+            
+            # Try local tokenizer first
             tokenizer_path = "tokenizer"
             if os.path.exists(tokenizer_path):
                 try:
                     from transformers import AutoTokenizer
                     st.session_state.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+                    
+                    # Fix the padding token issue
+                    if st.session_state.tokenizer.pad_token is None:
+                        st.session_state.tokenizer.pad_token = st.session_state.tokenizer.eos_token
+                        st.info("✅ Fixed tokenizer padding token")
+                    
+                    tokenizer_loaded = True
+                    st.success("✅ Local tokenizer loaded successfully!")
+                    
                 except Exception as e:
-                    st.warning(f"Could not load tokenizer: {str(e)}")
+                    st.warning(f"Could not load local tokenizer: {str(e)}")
+            
+            # If local tokenizer failed, try downloading from HuggingFace
+            if not tokenizer_loaded:
+                try:
+                    from transformers import AutoTokenizer
+                    st.info("📦 Downloading tokenizer from HuggingFace...")
+                    st.session_state.tokenizer = AutoTokenizer.from_pretrained(repo_id)
+                    
+                    # Fix the padding token issue
+                    if st.session_state.tokenizer.pad_token is None:
+                        st.session_state.tokenizer.pad_token = st.session_state.tokenizer.eos_token
+                        st.info("✅ Fixed tokenizer padding token")
+                    
+                    st.success("✅ HuggingFace tokenizer loaded successfully!")
+                    
+                except Exception as e:
+                    st.warning(f"Could not load HuggingFace tokenizer: {str(e)}")
                     st.session_state.tokenizer = None
-            else:
+            
+            if not tokenizer_loaded and st.session_state.tokenizer is None:
                 st.session_state.tokenizer = None
+                if st.session_state.model_type == "compressed":
+                    st.warning("⚠️ Tokenizer not available - ML predictions may be limited")
                 
         except Exception as e:
             st.error(f"Error in model setup: {str(e)}")
@@ -240,7 +272,13 @@ def predict_ml_score(sequence):
     try:
         if st.session_state.model_type == "compressed" and st.session_state.tokenizer:
             # Use compressed ML model
-            inputs = st.session_state.tokenizer(sequence, return_tensors="pt", padding=True, truncation=True)
+            inputs = st.session_state.tokenizer(
+                sequence, 
+                return_tensors="pt", 
+                padding=True, 
+                truncation=True,
+                max_length=512  # Add max length to prevent issues
+            )
             
             with torch.no_grad():
                 outputs = st.session_state.model(**inputs).logits
@@ -452,12 +490,17 @@ if page == "Home":
                 st.markdown("- High accuracy predictions")
                 st.markdown("- Compressed model (610MB)")
                 st.markdown("- Repository: genai-compressed-final")
+                if st.session_state.tokenizer:
+                    st.markdown("- ✅ Tokenizer loaded (padding fixed)")
+                else:
+                    st.markdown("- ⚠️ Tokenizer not available")
                 if os.path.exists("scaler.pkl"):
                     st.markdown("- ✅ scaler.pkl detected")
             else:
                 st.info("📊 Feature-Based Model Active")
                 st.markdown("- Enhanced feature predictions")
                 st.markdown("- Compressed ML model available")
+                st.markdown("- Will attempt ML loading on next interaction")
         else:
             st.error("❌ Model Loading Failed")
         
