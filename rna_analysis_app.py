@@ -199,17 +199,21 @@ def predict_binding_with_scaler(sequence):
     score += len(features['position_matches']) * 50
     score += np.random.normal(0, 75)
     
-    # Apply scaler if available - INTEGRATED FROM WORKING VERSION
+    # Apply scaler if available - FIXED VERSION
     try:
         scaler_path = "scaler.pkl"
         if os.path.exists(scaler_path):
             import pickle
             scaler = pickle.load(open(scaler_path, 'rb'))
-            # Apply scaler transformation (simulate ML-like scaling)
-            scaled_score = (score + 7500) / 2000  # Normalize
-            scaled_score = scaler.transform([[scaled_score]])[0][0]
-            return scaled_score
-    except:
+            # Normalize the score to 0-1 range for scaler input
+            normalized_score = (score + 7500) / 2000
+            # Apply scaler transformation
+            scaled_score = scaler.transform([[normalized_score]])[0][0]
+            # Inverse transform back to original binding score range
+            final_score = (scaled_score * 2000) - 7500
+            return final_score
+    except Exception as e:
+        # If scaler fails, return original score
         pass
     
     return score
