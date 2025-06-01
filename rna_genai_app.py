@@ -763,7 +763,7 @@ elif page == "GenAI Generation Tool":
                 "Traditional Score": "{:.2f}",
                 "GenAI Score": "{:.2f}",
                 "Sequence Length": "{:.0f}"
-            }).applymap(highlight_quality, subset=["Quality"])
+            }).map(highlight_quality, subset=["Quality"])
             
             st.dataframe(styled_df, use_container_width=True)
             
