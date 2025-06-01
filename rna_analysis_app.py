@@ -705,13 +705,13 @@ elif page == "Sequence Analyzer":
 elif page == "Dataset Insights":
     st.markdown('<h2 class="sub-header">Dataset Analysis & Insights</h2>', unsafe_allow_html=True)
     
-    tab1, tab2, tab3 = st.tabs(["Distribution Analysis", "Binding Factors", "Model Performance"])
+    tab1, tab2 = st.tabs(["Distribution Analysis", "Binding Factors"])
     
     with tab1:
         st.markdown("### Sample RNA Sequences")
         display_df = df.copy()
         display_df['Quality'] = display_df['Score'].apply(
-            lambda x: 'Exceptional' if x < -7500 else 'Excellent' if x < -7214.13 else 'Strong' if x < -7000 else 'Good' if x < -6800 else 'Moderate'
+            lambda x: 'Excellent' if x < -7400 else 'Great' if x < -7214.13 else 'Good' if x < -7214.13 + 50 else 'Medium' if x < -7214.13 + 150 else 'Subpar' if x < -7214.13 + 300 else 'Poor'
         )
         st.dataframe(display_df[['RNA_Name', 'Score', 'Quality', 'RNA_Sequence']].head(10), use_container_width=True)
         
@@ -720,16 +720,17 @@ elif page == "Dataset Insights":
         
         sns.histplot(df['Score'], kde=True, ax=ax1, color='#4287f5', alpha=0.7)
         ax1.axvline(x=-7214.13, color='red', linestyle='--', linewidth=2, label='Multi-Pose Threshold')
-        ax1.axvline(x=-7500, color='purple', linestyle=':', alpha=0.7, label='Exceptional')
-        ax1.axvline(x=-7000, color='green', linestyle=':', alpha=0.7, label='Strong')
+        ax1.axvline(x=-7400, color='purple', linestyle=':', alpha=0.7, label='Excellent')
+        ax1.axvline(x=-7214.13 + 50, color='green', linestyle=':', alpha=0.7, label='Good')
+        ax1.axvline(x=-7214.13 + 150, color='orange', linestyle=':', alpha=0.7, label='Medium')
         ax1.set_xlabel("Binding Score")
         ax1.set_ylabel("Frequency")
         ax1.legend()
         ax1.set_title("Multi-Pose Binding Analysis")
         
         quality_counts = display_df['Quality'].value_counts()
-        colors = ['#0D5016', '#1B5E20', '#2E7D32', '#388E3C', '#F57C00']
-        ax2.pie(quality_counts.values, labels=quality_counts.index, autopct='%1.1f%%', colors=colors)
+        colors = ['#1B5E20', '#2E7D32', '#388E3C', '#FFA726', '#FF7043', '#D32F2F']
+        ax2.pie(quality_counts.values, labels=quality_counts.index, autopct='%1.1f%%', colors=colors[:len(quality_counts)])
         ax2.set_title("Quality Distribution")
         
         fig.tight_layout()
@@ -739,13 +740,13 @@ elif page == "Dataset Insights":
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("Total Sequences", "1,232")
-            st.metric("Good+ Binders", "304 (24.7%)")
+            st.metric("Great+ Binders", f"{len(display_df[display_df['Score'] < -7214.13])} ({len(display_df[display_df['Score'] < -7214.13])/len(display_df)*100:.1f}%)")
         with col2:
-            st.metric("Elite Performers", "308 (25.0%)")
             st.metric("Multi-Pose F-statistic", "8.8565")
-        with col3:
             st.metric("Multi-Pose Threshold", "-7,214.13")
+        with col3:
             st.metric("Statistical Significance", "p < 0.0001")
+            st.metric("Excellent Binders", f"{len(display_df[display_df['Score'] < -7400])} ({len(display_df[display_df['Score'] < -7400])/len(display_df)*100:.1f}%)")
             
     with tab2:
         st.markdown("### Enhanced Binding Factors")
