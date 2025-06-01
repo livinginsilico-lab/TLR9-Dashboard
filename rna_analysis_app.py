@@ -1,4 +1,65 @@
-import streamlit as st
+# If elite-targeting, generate more and select best
+                if optimization_level == "Elite-Targeting":
+                    extended_sequences = sampling(
+                        num_samples=num_samples * 3,  # Generate more for better selection
+                        start=start_sequence if start_sequence else "<|endoftext|>",
+                        max_new_tokens=max_new_tokens,
+                        strategy=strategy,
+                        temperature=max(0.3, temperature - 0.3),  # Lower temperature for more deterministic
+                        optimization_level=optimization_level
+                    )
+                    
+                    # Score using comprehensive pattern analysis
+                    scored_sequences = []
+                    for seq in extended_sequences:
+                        # Traditional binding score
+                        binding_score = predict_binding(seq)
+                        
+                        # Comprehensive pattern score
+                        pattern_score = 0
+                        
+                        # Power motif scoring (comprehensive)
+                        power_motifs = {
+                            'UGUGUA': 20.2, 'GUGUAU': 19.2, 'GUGUGUGU': 18.6, 'UGUGUGU': 18.5,
+                            'GGAAUGU': 17.2, 'UGUGUU': 17.2, 'GAGAGAG': 14.2, 'UGUGUGUG': 13.9,
+                            'GUGUU': 8.4, 'UGUGU': 7.1, 'GUGUA': 5.9, 'GUGUG': 5.3
+                        }
+                        
+                        for motif, enrichment in power_motifs.items():
+                            count = seq.count(motif)
+                            if count > 0:
+                                pattern_score += count * enrichment * 2
+                        
+                        # Problem pattern penalties (comprehensive)
+                        ca_repeats = len(re.findall(r'(CA){3,}', seq))
+                        ac_repeats = len(re.findall(r'(AC){3,}', seq))
+                        uc_repeats = len(re.findall(r'(UC){3,}', seq))
+                        uccauu_count = seq.count('UCCAUU')
+                        
+                        pattern_score -= ca_repeats * 48  # 24x frequency * 2
+                        pattern_score -= ac_repeats * 40  # 20x frequency * 2
+                        pattern_score -= uc_repeats * 32  # 16x frequency * 2
+                        pattern_score -= uccauu_count * 22  # 11x frequency * 2
+                        
+                        # Position scoring (comprehensive)
+                        position_effects = {
+                            19: {'C': -16.0, 'U': +17.0},
+                            7: {'C': -8.6, 'A': +6.6}, 
+                            28: {'C': -8.4},
+                            15: {'C': -8.1},
+                            29: {'C': -7.5, 'G': +6.8},
+                            25: {'U': -7.5},
+                            22: {'U': -7.4}
+                        }
+                        
+                        for pos, effects in position_effects.items():
+                            if pos < len(seq):
+                                nt = seq[pos]
+                                if nt in effects:
+                                    pattern_score += effects[nt] * 3
+                        
+                        # Combined score (binding + pattern)
+                        combineimport streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -128,21 +189,48 @@ def extract_sequence_features(sequence):
     c_percent = (c_count / length) * 100
     gc_content = (g_count + c_count) / length * 100
     
-    # Check for beneficial motifs
-    good_motifs = ['UGUGUGU', 'GUGUGU', 'UGUGU', 'UGGACA', 'GUGAAG', 'AGAAGG', 'AAGGCA', 'AAGAGA', 'CAAGAU', 'UCAAGA', 'AGAGAA', 'GAGAAA', 'AGCCUG']
-    good_motif_counts = {}
-    for motif in good_motifs:
-        count = sequence.count(motif)
-        if count > 0:
-            good_motif_counts[motif] = count
+    # Check for beneficial motifs (from comprehensive analysis)
+    good_motifs = {
+        # 8-mer power motifs
+        'GUGUGUGU': 18.59, 'UGUGUGUG': 13.94, 'GAAUGUGU': 11.13, 'GGUGUCUG': 11.13, 'GAUGGUGA': 11.13,
+        # 7-mer power motifs  
+        'UGUGUGU': 18.52, 'GGAAUGU': 17.21, 'GAGAGAG': 14.17, 'AUGGAAU': 13.16, 'UGGUGGU': 12.14,
+        # 6-mer power motifs
+        'UGUGUA': 20.24, 'GUGUAU': 19.23, 'UGUGUU': 17.21, 'GAUUUU': 16.19, 'UUUGAA': 15.18,
+        # 5-mer power motifs
+        'GUGUU': 8.35, 'UGUGU': 7.12, 'GUGUA': 5.87, 'GUGUG': 5.30, 'CGUUU': 5.06,
+        # 4-mer power motifs
+        'GUGU': 4.44, 'UGUA': 2.54, 'UGUG': 2.53, 'GUAU': 2.49, 'AUGU': 2.37,
+        # 3-mer power motifs
+        'UGU': 2.18,
+        # Traditional beneficial motifs
+        'UGGACA': 3.0, 'GUGAAG': 3.0, 'AGAAGG': 2.5, 'AAGGCA': 2.5, 'AAGAGA': 2.5, 
+        'CAAGAU': 2.5, 'UCAAGA': 2.5, 'AGAGAA': 2.5, 'GAGAAA': 2.5, 'AGCCUG': 2.5
+    }
     
-    # Check for problematic motifs
-    problem_motifs = ['UGGUGA', 'GUGAUG', 'GAUGGU', 'AUGGUG', 'GGUGAU', 'UGAUGG', 'GUGGUG', 'CACACA', 'ACACAC']
-    problem_motif_counts = {}
-    for motif in problem_motifs:
+    good_motif_counts = {}
+    for motif, enrichment in good_motifs.items():
         count = sequence.count(motif)
         if count > 0:
-            problem_motif_counts[motif] = count
+            good_motif_counts[motif] = {'count': count, 'enrichment': enrichment}
+    
+    # Check for problematic motifs (from comprehensive analysis)
+    problem_motifs = {
+        # Tandem repeats (highly problematic)
+        'CACACA': 24.0, 'ACACAC': 20.0, 'UCUCUC': 16.0, 'AUCACA': 12.0, 'UCACAC': 11.0,
+        'AACACA': 11.0, 'CAUCAC': 12.0, 'ACAUCA': 12.0, 'CACAUC': 12.0, 'ACACAU': 14.0,
+        # Traditional problematic motifs
+        'UGGUGA': 5.0, 'GUGAUG': 4.5, 'GAUGGU': 4.5, 'AUGGUG': 4.0, 'GGUGAU': 4.0, 
+        'UGAUGG': 4.0, 'GUGGUG': 4.0,
+        # UC-rich problematic patterns
+        'UCCAUU': 11.0, 'CCAUUC': 8.0, 'CAAUCC': 7.0
+    }
+    
+    problem_motif_counts = {}
+    for motif, frequency in problem_motifs.items():
+        count = sequence.count(motif)
+        if count > 0:
+            problem_motif_counts[motif] = {'count': count, 'frequency': frequency}
     
     # Calculate UG/GU dinucleotide frequency
     ug_count = 0
@@ -155,12 +243,27 @@ def extract_sequence_features(sequence):
     
     ug_gu_density = (ug_count + gu_count) * 100 / (length - 1) if length > 1 else 0
     
-    # Key positions that affect binding
-    key_positions = {9: 'G', 21: 'C', 6: 'G', 2: 'G', 19: 'G'}
-    position_matches = {}
-    for pos, nt in key_positions.items():
-        if pos < len(sequence) and sequence[pos] == nt:
-            position_matches[pos] = nt
+    # Key positions that affect binding (from position analysis)
+    key_positions = {
+        19: {'C': -16.0, 'U': +17.0},  # Position 19 critical effects
+        7: {'C': -8.6, 'A': +6.6},     # Position 7 effects  
+        28: {'C': -8.4},               # Position 28 C penalty
+        15: {'C': -8.1},               # Position 15 C penalty
+        29: {'C': -7.5, 'G': +6.8},   # Position 29 effects
+        25: {'U': -7.5},               # Position 25 U penalty
+        22: {'U': -7.4},               # Position 22 U penalty
+        9: {'G': -6.0},                # Position 9 G penalty (from traditional analysis)
+        21: {'C': -5.0},               # Position 21 C penalty (from traditional analysis)
+        6: {'G': -4.0},                # Position 6 G penalty (from traditional analysis)
+        2: {'G': -4.0}                 # Position 2 G penalty (from traditional analysis)
+    }
+    
+    position_effects = {}
+    for pos, effects in key_positions.items():
+        if pos < len(sequence):
+            nt = sequence[pos]
+            if nt in effects:
+                position_effects[pos] = {'nt': nt, 'effect': effects[nt]}
     
     return {
         'length': length,
@@ -172,7 +275,7 @@ def extract_sequence_features(sequence):
         'good_motifs': good_motif_counts,
         'problem_motifs': problem_motif_counts,
         'ug_gu_density': ug_gu_density,
-        'position_matches': position_matches
+        'position_effects': position_effects
     }
 
 def get_comprehensive_sequence_insights(sequence, score=None):
@@ -194,24 +297,91 @@ def get_comprehensive_sequence_insights(sequence, score=None):
             insights.append("❌ **Weak Binder**: Below average performance, requires significant optimization")
     
     # === CRITICAL MOTIF ANALYSIS ===
-    # Check for the most powerful motifs discovered
+    # Check for the most powerful motifs discovered (with enrichment data)
+    power_motifs_found = []
+    
+    # Check 8-mer power motifs
+    gugugugu_count = sequence.count('GUGUGUGU')
+    ugugugug_count = sequence.count('UGUGUGUG')
+    if gugugugu_count > 0:
+        power_motifs_found.append(f"GUGUGUGU ({gugugugu_count}x, 18.6x enriched)")
+    if ugugugug_count > 0:
+        power_motifs_found.append(f"UGUGUGUG ({ugugugug_count}x, 13.9x enriched)")
+    
+    # Check 7-mer power motifs
     ugugugu_count = sequence.count('UGUGUGU')
-    gugugu_count = sequence.count('GUGUGU') 
-    ugugu_count = sequence.count('UGUGU')
-    
+    ggaaugu_count = sequence.count('GGAAUGU')
     if ugugugu_count > 0:
-        insights.append(f"🎯 **UGUGUGU Motif Found ({ugugugu_count}x)**: This is the most powerful binding enhancer (18.5x enriched, p<0.0001)")
-    elif gugugu_count > 0:
-        insights.append(f"🎯 **GUGUGU Motif Found ({gugugu_count}x)**: Strong binding enhancer (18.6x enriched in top sequences)")
-    elif ugugu_count > 0:
-        insights.append(f"🔬 **UGUGU Pattern ({ugugu_count}x)**: Beneficial motif (7.1x enriched) that enhances binding affinity")
+        power_motifs_found.append(f"UGUGUGU ({ugugugu_count}x, 18.5x enriched)")
+    if ggaaugu_count > 0:
+        power_motifs_found.append(f"GGAAUGU ({ggaaugu_count}x, 17.2x enriched)")
     
-    # Check for problematic CA/AC patterns
-    ca_repeats = len(re.findall(r'(CA){3,}', sequence))
-    ac_repeats = len(re.findall(r'(AC){3,}', sequence))
+    # Check 6-mer power motifs
+    ugugua_count = sequence.count('UGUGUA')
+    guguau_count = sequence.count('GUGUAU')
+    if ugugua_count > 0:
+        power_motifs_found.append(f"UGUGUA ({ugugua_count}x, 20.2x enriched)")
+    if guguau_count > 0:
+        power_motifs_found.append(f"GUGUAU ({guguau_count}x, 19.2x enriched)")
     
-    if ca_repeats > 0 or ac_repeats > 0:
-        insights.append(f"⚠️ **CA/AC Tandem Repeats Detected**: These patterns are 24x more common in weak binders and should be minimized")
+    # Check 5-mer power motifs
+    guguu_count = sequence.count('GUGUU')
+    ugugu_count = sequence.count('UGUGU')
+    if guguu_count > 0:
+        power_motifs_found.append(f"GUGUU ({guguu_count}x, 8.4x enriched)")
+    if ugugu_count > 0:
+        power_motifs_found.append(f"UGUGU ({ugugu_count}x, 7.1x enriched)")
+    
+    if power_motifs_found:
+        insights.append(f"🎯 **Power Motifs Detected**: {', '.join(power_motifs_found[:3])} - these are the strongest binding enhancers (p<0.0001)")
+    
+    # Check for highly problematic patterns
+    critical_problems = []
+    
+    # Tandem repeats (most problematic)
+    cacaca_count = len(re.findall(r'(CA){3,}', sequence))
+    acacac_count = len(re.findall(r'(AC){3,}', sequence))
+    ucucuc_count = len(re.findall(r'(UC){3,}', sequence))
+    
+    if cacaca_count > 0:
+        critical_problems.append(f"CA×3+ repeats ({cacaca_count}x, 24x more in weak binders)")
+    if acacac_count > 0:
+        critical_problems.append(f"AC×3+ repeats ({acacac_count}x, 20x more in weak binders)")
+    if ucucuc_count > 0:
+        critical_problems.append(f"UC×3+ repeats ({ucucuc_count}x, 16x more in weak binders)")
+    
+    # Other problematic patterns
+    uccauu_count = sequence.count('UCCAUU')
+    if uccauu_count > 0:
+        critical_problems.append(f"UCCAUU motifs ({uccauu_count}x, 11x in weak binders)")
+    
+    if critical_problems:
+        insights.append(f"⚠️ **Critical Problems Detected**: {', '.join(critical_problems[:2])} - major binding penalties")
+    
+    # === COMPREHENSIVE POSITION ANALYSIS ===
+    position_effects = []
+    critical_positions = {
+        19: {'C': -16.0, 'U': +17.0},
+        7: {'C': -8.6, 'A': +6.6}, 
+        28: {'C': -8.4},
+        15: {'C': -8.1},
+        29: {'C': -7.5, 'G': +6.8},
+        25: {'U': -7.5},
+        22: {'U': -7.4}
+    }
+    
+    for pos, effects in critical_positions.items():
+        if pos < len(sequence):
+            nt = sequence[pos]
+            if nt in effects:
+                effect = effects[nt]
+                if effect > 10:
+                    position_effects.append(f"Position {pos} {nt} (+{effect:.0f}% boost)")
+                elif effect < -5:
+                    position_effects.append(f"Position {pos} {nt} ({effect:.0f}% penalty)")
+    
+    if position_effects:
+        insights.append(f"📍 **Position-Specific Effects**: {', '.join(position_effects[:2])} - single nucleotide impacts")
     
     # === STRUCTURAL PATTERN ANALYSIS ===
     # GU/UG alternating patterns (key discovery)
@@ -235,12 +405,34 @@ def get_comprehensive_sequence_insights(sequence, score=None):
         insights.append(f"🔄 **Low Complexity Warning**: Entropy {entropy:.2f} below optimal range - may limit binding versatility")
     
     # === POSITION-SPECIFIC CRITICAL INSIGHT ===
-    if len(sequence) > 19:
+    if len(sequence) > 29:  # Check multiple critical positions
+        critical_position_effects = []
+        
+        # Position 19 (most critical)
         pos19_nt = sequence[19]
         if pos19_nt == 'U':
-            insights.append("✅ **Position 19 Optimization**: U at position 19 is 17% enriched in strong binders")
+            critical_position_effects.append("Position 19 U (+17% boost)")
         elif pos19_nt == 'C':
-            insights.append("⚠️ **Position 19 Warning**: C at position 19 is 16% depleted in strong binders - consider U substitution")
+            critical_position_effects.append("Position 19 C (-16% penalty)")
+        
+        # Position 7
+        if len(sequence) > 7:
+            pos7_nt = sequence[7]
+            if pos7_nt == 'A':
+                critical_position_effects.append("Position 7 A (+6.6% boost)")
+            elif pos7_nt == 'C':
+                critical_position_effects.append("Position 7 C (-8.6% penalty)")
+        
+        # Position 29
+        if len(sequence) > 29:
+            pos29_nt = sequence[29]
+            if pos29_nt == 'G':
+                critical_position_effects.append("Position 29 G (+6.8% boost)")
+            elif pos29_nt == 'C':
+                critical_position_effects.append("Position 29 C (-7.5% penalty)")
+        
+        if critical_position_effects:
+            insights.append(f"🎯 **Critical Positions**: {', '.join(critical_position_effects[:2])} - precision targeting opportunities")
     
     # === HAIRPIN POTENTIAL ===
     hairpin_potential = detect_hairpin_patterns(sequence)
@@ -252,53 +444,142 @@ def get_comprehensive_sequence_insights(sequence, score=None):
 def analyze_sequence_with_new_insights(sequence, score=None):
     """Comprehensive sequence analysis with latest research"""
     
-    # Calculate key metrics
+    # Calculate key metrics with comprehensive analysis
     entropy = calculate_shannon_entropy(sequence)
-    ugugugu_count = sequence.count('UGUGUGU')
-    ca_repeats = len(re.findall(r'(CA){3,}', sequence))
-    pos19_nt = sequence[19] if len(sequence) > 19 else "N/A"
     
-    # Performance prediction based on patterns
+    # Power motif detection (comprehensive)
+    power_motifs_found = []
+    total_power_score = 0
+    
+    # 8-mer power motifs
+    gugugugu_count = sequence.count('GUGUGUGU')
+    ugugugug_count = sequence.count('UGUGUGUG')
+    if gugugugu_count > 0:
+        power_motifs_found.append(f"GUGUGUGU×{gugugugu_count}")
+        total_power_score += gugugugu_count * 18.6
+    if ugugugug_count > 0:
+        power_motifs_found.append(f"UGUGUGUG×{ugugugug_count}")
+        total_power_score += ugugugug_count * 13.9
+    
+    # 7-mer power motifs
+    ugugugu_count = sequence.count('UGUGUGU')
+    ggaaugu_count = sequence.count('GGAAUGU')
+    if ugugugu_count > 0:
+        power_motifs_found.append(f"UGUGUGU×{ugugugu_count}")
+        total_power_score += ugugugu_count * 18.5
+    if ggaaugu_count > 0:
+        power_motifs_found.append(f"GGAAUGU×{ggaaugu_count}")
+        total_power_score += ggaaugu_count * 17.2
+    
+    # 6-mer power motifs
+    ugugua_count = sequence.count('UGUGUA')
+    guguau_count = sequence.count('GUGUAU')
+    if ugugua_count > 0:
+        power_motifs_found.append(f"UGUGUA×{ugugua_count}")
+        total_power_score += ugugua_count * 20.2
+    if guguau_count > 0:
+        power_motifs_found.append(f"GUGUAU×{guguau_count}")
+        total_power_score += guguau_count * 19.2
+    
+    # Problem motif detection (comprehensive)
+    problem_patterns = []
+    total_penalty_score = 0
+    
+    # Tandem repeats (most problematic)
+    ca_repeats = len(re.findall(r'(CA){3,}', sequence))
+    ac_repeats = len(re.findall(r'(AC){3,}', sequence))
+    uc_repeats = len(re.findall(r'(UC){3,}', sequence))
+    
+    if ca_repeats > 0:
+        problem_patterns.append(f"CA×3+({ca_repeats})")
+        total_penalty_score += ca_repeats * 24
+    if ac_repeats > 0:
+        problem_patterns.append(f"AC×3+({ac_repeats})")
+        total_penalty_score += ac_repeats * 20
+    if uc_repeats > 0:
+        problem_patterns.append(f"UC×3+({uc_repeats})")
+        total_penalty_score += uc_repeats * 16
+    
+    # UC-rich problematic patterns
+    uccauu_count = sequence.count('UCCAUU')
+    if uccauu_count > 0:
+        problem_patterns.append(f"UCCAUU×{uccauu_count}")
+        total_penalty_score += uccauu_count * 11
+    
+    # Position analysis (comprehensive)
+    position_effects = []
+    position_score = 0
+    
+    critical_positions = {
+        19: {'C': -16.0, 'U': +17.0},
+        7: {'C': -8.6, 'A': +6.6}, 
+        28: {'C': -8.4},
+        15: {'C': -8.1},
+        29: {'C': -7.5, 'G': +6.8},
+        25: {'U': -7.5},
+        22: {'U': -7.4},
+        9: {'G': -6.0},
+        21: {'C': -5.0},
+        6: {'G': -4.0},
+        2: {'G': -4.0}
+    }
+    
+    for pos, effects in critical_positions.items():
+        if pos < len(sequence):
+            nt = sequence[pos]
+            if nt in effects:
+                effect = effects[nt]
+                position_effects.append(f"Pos{pos}{nt}({effect:+.1f}%)")
+                position_score += effect
+    
+    # Performance prediction based on comprehensive patterns
     performance_score = 0
     
-    if ugugugu_count > 0:
-        performance_score += 50 * ugugugu_count
-    if pos19_nt == 'U':
-        performance_score += 30
-    elif pos19_nt == 'C':
-        performance_score -= 30
-    if ca_repeats > 0:
-        performance_score -= 40 * ca_repeats
-    if entropy > 1.94:
-        performance_score += 20
+    # Power motif bonus (major impact)
+    performance_score += total_power_score * 2  # Each enrichment point = 2 performance points
     
-    # Display metrics
+    # Position effects
+    performance_score += position_score * 3  # Each % = 3 performance points
+    
+    # Problem pattern penalties
+    performance_score -= total_penalty_score * 2  # Each frequency point = -2 performance points
+    
+    # Entropy bonus
+    if entropy > 1.94:
+        performance_score += 25
+    elif entropy < 1.87:
+        performance_score -= 15
+    
+    # Display comprehensive metrics
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        color = "#1b5e20" if ugugugu_count > 0 else "#757575"
+        color = "#1b5e20" if len(power_motifs_found) > 0 else "#757575"
         st.markdown(f"""
         <div style="text-align: center; padding: 15px; border: 2px solid {color}; border-radius: 10px; background: {color}15;">
-            <h3 style="color: {color}; margin: 0;">{ugugugu_count}</h3>
-            <p style="margin: 5px 0 0 0; font-size: 12px;">UGUGUGU Motifs</p>
+            <h3 style="color: {color}; margin: 0;">{len(power_motifs_found)}</h3>
+            <p style="margin: 5px 0 0 0; font-size: 12px;">Power Motifs</p>
+            <small>{', '.join(power_motifs_found[:2])}</small>
         </div>
         """, unsafe_allow_html=True)
     
     with col2:
-        color = "#1b5e20" if pos19_nt == 'U' else "#d32f2f" if pos19_nt == 'C' else "#757575"
+        color = "#d32f2f" if len(problem_patterns) > 0 else "#1b5e20"
         st.markdown(f"""
         <div style="text-align: center; padding: 15px; border: 2px solid {color}; border-radius: 10px; background: {color}15;">
-            <h3 style="color: {color}; margin: 0;">{pos19_nt}</h3>
-            <p style="margin: 5px 0 0 0; font-size: 12px;">Position 19</p>
+            <h3 style="color: {color}; margin: 0;">{len(problem_patterns)}</h3>
+            <p style="margin: 5px 0 0 0; font-size: 12px;">Problem Patterns</p>
+            <small>{', '.join(problem_patterns[:2])}</small>
         </div>
         """, unsafe_allow_html=True)
     
     with col3:
-        color = "#d32f2f" if ca_repeats > 0 else "#1b5e20"
+        color = "#1b5e20" if len(position_effects) > 2 else "#ff9800" if len(position_effects) > 0 else "#757575"
         st.markdown(f"""
         <div style="text-align: center; padding: 15px; border: 2px solid {color}; border-radius: 10px; background: {color}15;">
-            <h3 style="color: {color}; margin: 0;">{ca_repeats}</h3>
-            <p style="margin: 5px 0 0 0; font-size: 12px;">CA Repeats</p>
+            <h3 style="color: {color}; margin: 0;">{len(position_effects)}</h3>
+            <p style="margin: 5px 0 0 0; font-size: 12px;">Position Effects</p>
+            <small>{', '.join(position_effects[:2])}</small>
         </div>
         """, unsafe_allow_html=True)
     
@@ -308,27 +589,37 @@ def analyze_sequence_with_new_insights(sequence, score=None):
         <div style="text-align: center; padding: 15px; border: 2px solid {color}; border-radius: 10px; background: {color}15;">
             <h3 style="color: {color}; margin: 0;">{entropy:.2f}</h3>
             <p style="margin: 5px 0 0 0; font-size: 12px;">Entropy</p>
+            <small>Target: >1.94</small>
         </div>
         """, unsafe_allow_html=True)
     
-    # Performance assessment
-    if performance_score > 50:
+    # Comprehensive performance assessment
+    if performance_score > 100:
         performance_level = "Elite Candidate"
+        performance_color = "#0d4f0c"
+        performance_desc = "Multiple power motifs + optimal positions"
+    elif performance_score > 50:
+        performance_level = "Strong Potential" 
         performance_color = "#1b5e20"
+        performance_desc = "Good motif profile + beneficial positions"
     elif performance_score > 0:
-        performance_level = "Good Potential" 
+        performance_level = "Good Foundation"
         performance_color = "#388e3c"
-    elif performance_score > -30:
+        performance_desc = "Some beneficial elements present"
+    elif performance_score > -50:
         performance_level = "Needs Optimization"
         performance_color = "#ff9800"
+        performance_desc = "Mixed profile, focus on key improvements"
     else:
         performance_level = "Major Issues"
         performance_color = "#d32f2f"
+        performance_desc = "Multiple problematic patterns detected"
     
     st.markdown(f"""
     <div style="background: {performance_color}15; border: 2px solid {performance_color}; padding: 20px; border-radius: 10px; text-align: center; margin: 20px 0;">
-        <h3 style="color: {performance_color}; margin: 0 0 10px 0;">Pattern-Based Assessment: {performance_level}</h3>
+        <h3 style="color: {performance_color}; margin: 0 0 10px 0;">Comprehensive Assessment: {performance_level}</h3>
         <p style="margin: 0; font-size: 16px;">Performance Score: {performance_score:+d}</p>
+        <p style="margin: 5px 0 0 0; font-size: 14px; color: {performance_color};">{performance_desc}</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -739,11 +1030,16 @@ def create_enhanced_homepage_with_analysis():
             st.markdown("#### 🚀 Power Motifs (Statistically Significant)")
             
             power_motifs = [
-                ("UGUGUGU", "18.5x", "73 vs 4", "p<0.0001", "#1b5e20"),
-                ("GUGUGU", "18.6x", "55 vs 3", "p<0.0001", "#2e7d32"),
-                ("UGUGU", "7.1x", "133 vs 19", "p<0.0001", "#388e3c"),
-                ("GUGUU", "8.4x", "33 vs 4", "p<0.0001", "#43a047"),
-                ("GUGU", "4.4x", "218 vs 50", "p<0.0001", "#4caf50")
+                ("UGUGUA", "20.2x", "20 vs 1", "p<0.0001", "#0d4f0c"),
+                ("GUGUAU", "19.2x", "19 vs 1", "p<0.0001", "#1b5e20"),
+                ("GUGUGUGU", "18.6x", "55 vs 3", "p<0.0001", "#2e7d32"),
+                ("UGUGUGU", "18.5x", "73 vs 4", "p<0.0001", "#388e3c"),
+                ("GGAAUGU", "17.2x", "17 vs 1", "p<0.0001", "#43a047"),
+                ("UGUGUU", "17.2x", "17 vs 1", "p<0.0001", "#4caf50"),
+                ("GAUUUU", "16.2x", "16 vs 1", "p<0.0001", "#66bb6a"),
+                ("UGUGUGUG", "13.9x", "55 vs 4", "p<0.0001", "#81c784"),
+                ("GUGUU", "8.4x", "33 vs 4", "p<0.0001", "#a5d6a7"),
+                ("UGUGU", "7.1x", "133 vs 19", "p<0.0001", "#c8e6c9")
             ]
             
             for motif, enrichment, counts, pvalue, color in power_motifs:
@@ -758,11 +1054,15 @@ def create_enhanced_homepage_with_analysis():
             st.markdown("#### ⚠️ Warning Patterns")
             
             warning_patterns = [
-                ("CA×3 Repeats", "24x in weak", "Tandem CA repeats"),
-                ("AC×3 Repeats", "20x in weak", "Tandem AC repeats"), 
-                ("UC×3 Repeats", "16x in weak", "Tandem UC repeats"),
-                ("CA Alternating", "29x in weak", "CACACA patterns"),
-                ("Position 19 C", "16% depleted", "Critical position")
+                ("CA×3+ Repeats", "24x in weak", "CACACA tandem repeats"),
+                ("AC×3+ Repeats", "20x in weak", "ACACAC tandem repeats"), 
+                ("UC×3+ Repeats", "16x in weak", "UCUCUC tandem repeats"),
+                ("UCCAUU motif", "11x in weak", "UC-rich problematic pattern"),
+                ("Position 19 C", "16% depleted", "Critical position penalty"),
+                ("Position 7 C", "8.6% depleted", "Secondary position penalty"),
+                ("Position 28 C", "8.4% depleted", "Tertiary position penalty"),
+                ("Position 25 U", "7.5% depleted", "U penalty position"),
+                ("Position 22 U", "7.4% depleted", "U penalty position")
             ]
             
             for pattern, frequency, description in warning_patterns:
@@ -780,11 +1080,14 @@ def create_enhanced_homepage_with_analysis():
             st.markdown("#### 🌀 Beneficial Structural Elements")
             
             beneficial_structures = [
-                "**GU/UG Alternating**: 80x enriched in strong binders",
-                "**Hairpin Potential**: UUUC loops enhance specificity", 
-                "**Purine Clusters**: Max 43-nt runs in strong binders",
-                "**Shannon Entropy**: 1.943±0.073 optimal complexity",
-                "**Position 19 U**: 17% enrichment in top performers"
+                "**GU/UG Alternating (3+)**: 80x enriched in strong binders",
+                "**UGUGUA/GUGUAU**: 20x+ enriched 6-mer power motifs", 
+                "**Position 19 U**: +17% performance boost (strongest single effect)",
+                "**Position 29 G**: +6.8% performance improvement",
+                "**Position 7 A**: +6.6% binding enhancement",
+                "**Purine Clusters (3+)**: Max 43-nt runs enhance structure",
+                "**Shannon Entropy >1.94**: Optimal sequence complexity",
+                "**Hairpin Potential**: UUUC loops enhance specificity"
             ]
             
             for structure in beneficial_structures:
@@ -794,11 +1097,15 @@ def create_enhanced_homepage_with_analysis():
             st.markdown("#### ⚠️ Problematic Structures")
             
             problematic_structures = [
-                "**CA/AC Alternating**: Dominant in weak binders",
-                "**Excessive C Clusters**: Position-dependent penalties",
-                "**Low Entropy**: <1.87 reduces binding versatility", 
-                "**Position 19 C**: Major performance penalty",
-                "**Repetitive Patterns**: Reduce binding specificity"
+                "**CA/AC×3+ Tandem Repeats**: 24x/20x more in weak binders",
+                "**UC×3+ Tandem Repeats**: 16x more frequent in poor sequences",
+                "**UCCAUU Motifs**: 11x enriched in weak binding sequences",
+                "**Position 19 C**: -16% major performance penalty",
+                "**Position 7 C**: -8.6% binding reduction",
+                "**Position 28/15 C**: -8.4%/-8.1% penalties respectively", 
+                "**Position 25/22 U**: -7.5%/-7.4% U-specific penalties",
+                "**Low Entropy <1.87**: Reduces binding versatility",
+                "**Excessive Repetition**: Reduces binding specificity"
             ]
             
             for structure in problematic_structures:
@@ -846,9 +1153,12 @@ def create_enhanced_homepage_with_analysis():
         <div class="card">
             <h4>🚀 Must-Have Elements</h4>
             <ul>
-                <li><strong>UGUGUGU motifs</strong> - 18.5x binding enhancer</li>
-                <li><strong>U at position 19</strong> - 17% performance boost</li>
-                <li><strong>GU/UG alternating</strong> - 80x enriched pattern</li>
+                <li><strong>UGUGUA/GUGUAU motifs</strong> - 20x+ binding enhancers</li>
+                <li><strong>UGUGUGU/GUGUGUGU</strong> - 18.5x/18.6x power motifs</li>
+                <li><strong>U at position 19</strong> - +17% performance boost</li>
+                <li><strong>A at position 7</strong> - +6.6% enhancement</li>
+                <li><strong>G at position 29</strong> - +6.8% improvement</li>
+                <li><strong>GU/UG alternating (3+)</strong> - 80x enriched pattern</li>
                 <li><strong>Shannon entropy >1.94</strong> - optimal complexity</li>
                 <li><strong>Target elite cluster</strong> - score < -7374</li>
             </ul>
@@ -860,8 +1170,11 @@ def create_enhanced_homepage_with_analysis():
         <div class="card">
             <h4>⚠️ Critical Avoidance</h4>
             <ul>
-                <li><strong>CA/AC tandem repeats</strong> - 24x in weak binders</li>
-                <li><strong>C at position 19</strong> - 16% performance penalty</li>
+                <li><strong>CA/AC×3+ tandem repeats</strong> - 24x/20x in weak binders</li>
+                <li><strong>UC×3+ tandem repeats</strong> - 16x in weak binders</li>
+                <li><strong>UCCAUU motifs</strong> - 11x in weak sequences</li>
+                <li><strong>C at positions 19/7/28/15</strong> - major penalties</li>
+                <li><strong>U at positions 25/22</strong> - specific U penalties</li>
                 <li><strong>Excessive repetition</strong> - reduces specificity</li>
                 <li><strong>Low entropy <1.87</strong> - limits versatility</li>
                 <li><strong>Below -7214 threshold</strong> - poor binding zone</li>
@@ -874,11 +1187,14 @@ def create_enhanced_homepage_with_analysis():
         <div class="card">
             <h4>🔧 Optimization Strategy</h4>
             <ul>
-                <li><strong>Elite-targeting generation</strong> - force beneficial motifs</li>
-                <li><strong>Position 19 validation</strong> - ensure U placement</li>
-                <li><strong>Pattern ratio analysis</strong> - monitor GU/UG content</li>
-                <li><strong>Cluster targeting</strong> - aim for elite tier</li>
+                <li><strong>Elite-targeting generation</strong> - force power motifs</li>
+                <li><strong>Multi-position validation</strong> - check 19/7/29/28/15</li>
+                <li><strong>Tandem repeat screening</strong> - avoid CA/AC/UC×3+</li>
+                <li><strong>Pattern enrichment analysis</strong> - target 20x+ motifs</li>
+                <li><strong>Entropy optimization</strong> - maintain >1.94 complexity</li>
+                <li><strong>Cluster targeting</strong> - aim for elite tier (-7374+)</li>
                 <li><strong>Statistical validation</strong> - p<0.05 significance</li>
+                <li><strong>Comprehensive screening</strong> - all 9 warning patterns</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
@@ -1010,37 +1326,120 @@ def enhanced_predict_sequence_analysis():
                 
                 with col1:
                     st.markdown("**Beneficial Patterns Found:**")
+                    
+                    # Comprehensive power motif detection
+                    power_motifs_detected = []
+                    
+                    # 8-mer motifs
+                    gugugugu_count = clean_sequence.count('GUGUGUGU')
+                    ugugugug_count = clean_sequence.count('UGUGUGUG')
+                    gaaugugu_count = clean_sequence.count('GAAUGUGU')
+                    
+                    if gugugugu_count > 0:
+                        power_motifs_detected.append(("GUGUGUGU", gugugugu_count, "18.6x enriched"))
+                    if ugugugug_count > 0:
+                        power_motifs_detected.append(("UGUGUGUG", ugugugug_count, "13.9x enriched"))
+                    if gaaugugu_count > 0:
+                        power_motifs_detected.append(("GAAUGUGU", gaaugugu_count, "11.1x enriched"))
+                    
+                    # 7-mer motifs
                     ugugugu_count = clean_sequence.count('UGUGUGU')
-                    gugugu_count = clean_sequence.count('GUGUGU')
-                    ugugu_count = clean_sequence.count('UGUGU')
-                    gu_patterns = len(re.findall(r'(GU){3,}', clean_sequence))
+                    ggaaugu_count = clean_sequence.count('GGAAUGU')
+                    gagagag_count = clean_sequence.count('GAGAGAG')
                     
                     if ugugugu_count > 0:
-                        st.success(f"UGUGUGU motifs: {ugugugu_count} (18.5x enriched)")
-                    if gugugu_count > 0:
-                        st.success(f"GUGUGU motifs: {gugugu_count} (18.6x enriched)")
-                    if ugugu_count > 0:
-                        st.info(f"UGUGU motifs: {ugugu_count} (7.1x enriched)")
-                    if gu_patterns > 0:
-                        st.info(f"GU alternating patterns: {gu_patterns}")
+                        power_motifs_detected.append(("UGUGUGU", ugugugu_count, "18.5x enriched"))
+                    if ggaaugu_count > 0:
+                        power_motifs_detected.append(("GGAAUGU", ggaaugu_count, "17.2x enriched"))
+                    if gagagag_count > 0:
+                        power_motifs_detected.append(("GAGAGAG", gagagag_count, "14.2x enriched"))
+                    
+                    # 6-mer motifs  
+                    ugugua_count = clean_sequence.count('UGUGUA')
+                    guguau_count = clean_sequence.count('GUGUAU')
+                    uguguu_count = clean_sequence.count('UGUGUU')
+                    
+                    if ugugua_count > 0:
+                        power_motifs_detected.append(("UGUGUA", ugugua_count, "20.2x enriched"))
+                    if guguau_count > 0:
+                        power_motifs_detected.append(("GUGUAU", guguau_count, "19.2x enriched"))
+                    if uguguu_count > 0:
+                        power_motifs_detected.append(("UGUGUU", uguguu_count, "17.2x enriched"))
+                    
+                    # Display power motifs
+                    if power_motifs_detected:
+                        for motif, count, enrichment in power_motifs_detected[:5]:  # Show top 5
+                            st.success(f"{motif}: {count}x ({enrichment})")
+                    
+                    # GU alternating patterns
+                    gu_patterns = len(re.findall(r'(GU){3,}', clean_sequence))
+                    ug_patterns = len(re.findall(r'(UG){3,}', clean_sequence))
+                    if gu_patterns > 0 or ug_patterns > 0:
+                        st.info(f"GU/UG alternating patterns: {gu_patterns + ug_patterns} (80x enriched)")
+                    
+                    if not power_motifs_detected and gu_patterns == 0 and ug_patterns == 0:
+                        st.warning("No major beneficial patterns detected")
                 
                 with col2:
                     st.markdown("**Warning Patterns Found:**")
+                    
+                    # Comprehensive problem detection
+                    problems_detected = []
+                    
+                    # Tandem repeats (most critical)
                     ca_repeats = len(re.findall(r'(CA){3,}', clean_sequence))
                     ac_repeats = len(re.findall(r'(AC){3,}', clean_sequence))
-                    pos19_nt = clean_sequence[19] if len(clean_sequence) > 19 else None
+                    uc_repeats = len(re.findall(r'(UC){3,}', clean_sequence))
                     
                     if ca_repeats > 0:
-                        st.error(f"CA tandem repeats: {ca_repeats} (24x in weak binders)")
+                        problems_detected.append(("CA×3+ repeats", ca_repeats, "24x in weak binders"))
+                        st.error(f"CA×3+ repeats: {ca_repeats} (24x in weak binders)")
                     if ac_repeats > 0:
-                        st.error(f"AC tandem repeats: {ac_repeats} (20x in weak binders)")
-                    if pos19_nt == 'C':
-                        st.warning("Position 19 has C (16% depleted in strong binders)")
-                    elif pos19_nt == 'U':
-                        st.success("Position 19 has U (17% enriched in strong binders)")
+                        problems_detected.append(("AC×3+ repeats", ac_repeats, "20x in weak binders"))
+                        st.error(f"AC×3+ repeats: {ac_repeats} (20x in weak binders)")
+                    if uc_repeats > 0:
+                        problems_detected.append(("UC×3+ repeats", uc_repeats, "16x in weak binders"))
+                        st.error(f"UC×3+ repeats: {uc_repeats} (16x in weak binders)")
                     
-                    if ca_repeats == 0 and ac_repeats == 0 and pos19_nt != 'C':
-                        st.success("No major warning patterns detected!")
+                    # UC-rich patterns
+                    uccauu_count = clean_sequence.count('UCCAUU')
+                    if uccauu_count > 0:
+                        problems_detected.append(("UCCAUU motifs", uccauu_count, "11x in weak binders"))
+                        st.error(f"UCCAUU motifs: {uccauu_count} (11x in weak binders)")
+                    
+                    # Critical position analysis
+                    critical_position_issues = []
+                    
+                    if len(clean_sequence) > 19:
+                        pos19_nt = clean_sequence[19]
+                        if pos19_nt == 'C':
+                            critical_position_issues.append("Position 19 C (-16%)")
+                        elif pos19_nt == 'U':
+                            st.success("Position 19 U (+17% boost)")
+                    
+                    if len(clean_sequence) > 7:
+                        pos7_nt = clean_sequence[7]
+                        if pos7_nt == 'C':
+                            critical_position_issues.append("Position 7 C (-8.6%)")
+                        elif pos7_nt == 'A':
+                            st.success("Position 7 A (+6.6% boost)")
+                    
+                    if len(clean_sequence) > 28:
+                        pos28_nt = clean_sequence[28]
+                        if pos28_nt == 'C':
+                            critical_position_issues.append("Position 28 C (-8.4%)")
+                    
+                    if len(clean_sequence) > 25:
+                        pos25_nt = clean_sequence[25]
+                        if pos25_nt == 'U':
+                            critical_position_issues.append("Position 25 U (-7.5%)")
+                    
+                    # Display critical position issues
+                    for issue in critical_position_issues:
+                        st.warning(issue)
+                    
+                    if (len(problems_detected) == 0 and len(critical_position_issues) == 0):
+                        st.success("✅ No major warning patterns detected!")
             
         else:
             st.warning("Please enter a sequence for analysis")
@@ -1062,19 +1461,29 @@ def update_generation_page_with_insights():
         🎯 **Target the Elite 25%**: Only 297 sequences (24.4%) achieve elite binding scores < -7374.88
         
         🧬 **Power Motifs to Include**:
-        - **UGUGUGU**: 18.5x enriched in strong binders (p<0.0001)
-        - **GUGUGU**: 18.6x enriched (55 vs 3 occurrences)
-        - **GU/UG alternating**: 80x more common in strong binders
+        - **UGUGUA/GUGUAU**: 20.2x/19.2x enriched (strongest 6-mers)
+        - **GUGUGUGU/UGUGUGU**: 18.6x/18.5x enriched (power 7/8-mers)
+        - **GGAAUGU/UGUGUU**: 17.2x enriched (secondary power motifs)
+        - **GAGAGAG**: 14.2x enriched (alternating G/A pattern)
+        - **UGUGUGUG**: 13.9x enriched (8-mer alternating)
+        - **GU/UG alternating (3+)**: 80x more common in strong binders
         
         ⚠️ **Patterns to Avoid**:
-        - **CA/AC tandem repeats**: 24x more in weak binders
-        - **C at position 19**: 16% depleted in strong binders
+        - **CA×3+ tandem repeats**: 24x more in weak binders
+        - **AC×3+ tandem repeats**: 20x more in weak binders  
+        - **UC×3+ tandem repeats**: 16x more in weak binders
+        - **UCCAUU motifs**: 11x more in weak sequences
+        - **C at positions 19/7/28/15**: major binding penalties
+        - **U at positions 25/22**: specific U-penalty positions
         - **Excessive repetition**: Reduces binding specificity
         
         📊 **Optimal Metrics**:
         - **Shannon entropy**: >1.94 (strong binder average: 1.943±0.073)
         - **GC content**: 44.7% (strong binder average)
         - **UG/GU density**: <12% to avoid structural penalties
+        - **Position 19**: U (+17%) vs C (-16%) critical difference
+        - **Position 7**: A (+6.6%) vs C (-8.6%) secondary effect
+        - **Position 29**: G (+6.8%) vs C (-7.5%) tertiary effect
         """)
     
     col1, col2 = st.columns([1, 1])
