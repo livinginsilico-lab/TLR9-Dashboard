@@ -7,6 +7,7 @@ import torch
 import os
 import sys
 import random
+import pickle
 from contextlib import nullcontext
 
 # Make sure TOKENIZERS_PARALLELISM warning doesn't appear
@@ -63,7 +64,7 @@ st.markdown('<h1 class="main-header">RNA-Protein Binding Prediction Tool</h1>', 
 
 # Sidebar
 with st.sidebar:
-    st.image("https://raw.githubusercontent.com/plotly/dash-sample-apps/master/apps/dash-dna-precipitation/assets/DNA_strand.png", use_column_width=True)
+    st.image("https://raw.githubusercontent.com/plotly/dash-sample-apps/master/apps/dash-dna-precipitation/assets/DNA_strand.png", use_container_width=True)
     st.markdown("### Navigation")
     page = st.radio("", ["Home", "Sequence Analyzer", "Dataset Insights"])
     
@@ -235,6 +236,10 @@ def setup_model_components():
                     st.session_state.model_loaded = False
                     return
                 
+                # Load the scaler
+                with open(scaler_path, 'rb') as f:
+                    st.session_state.scaler = pickle.load(f)
+                
                 st.session_state.model_type = "ml_with_scaler"
                 st.session_state.model_loaded = True
                 st.success("✅ ML model with scaler loaded from GitHub files!")
@@ -262,18 +267,70 @@ def predict_ml_score(sequence):
         return {"RMSD_prediction": -7200, "confidence": "No Model"}
     
     try:
-        # Get the global model and tokenizer
+        # Get the global model, tokenizer, and scaler
         model = st.session_state.model
         tokenizer = st.session_state.tokenizer
+        scaler = st.session_state.scaler
         
-        # EXACT prediction pipeline from your notebook
-        score = predict_binding_with_scaler(sequence)
+        # Tokenize the sequence
+        inputs = tokenizer(sequence, return_tensors="pt", padding=True, truncation=True, max_length=128)
         
-        return {"RMSD_prediction": score, "confidence": "High"}
+        # Make prediction with the model
+        with torch.no_grad():
+            outputs = model(**inputs).logits
+        
+        scaled_prediction = outputs.item()
+        # Use the scaler to transform back to original scale
+        original_prediction = scaler.inverse_transform([[scaled_prediction]])[0][0]
+        
+        # Apply the catastrophic calibration from the notebook if needed
+        calibrated_prediction, correction, was_calibrated = catastrophic_only_calibration(original_prediction, sequence)
+        
+        return {"RMSD_prediction": calibrated_prediction, "confidence": "High"}
             
     except Exception as e:
         st.error(f"Prediction error: {str(e)}")
         return {"RMSD_prediction": -7200, "confidence": "Error"}
+
+def catastrophic_only_calibration(original_prediction, sequence):
+    """Apply calibration only to sequences likely to have catastrophic errors"""
+    # Extract features to detect potentially catastrophic errors
+    length = len(sequence)
+    c_count = sequence.count('C')
+    c_percent = (c_count / length) * 100
+    
+    problem_motifs = ['UGGUGA', 'GUGAUG', 'GAUGGU', 'AUGGUG', 'GGUGAU', 'UGAUGG', 'GUGGUG']
+    motif_counts = 0
+    for motif in problem_motifs:
+        motif_counts += sequence.count(motif)
+    
+    ug_count = 0
+    gu_count = 0
+    for i in range(len(sequence) - 1):
+        if sequence[i:i+2] == 'UG':
+            ug_count += 1
+        elif sequence[i:i+2] == 'GU':
+            gu_count += 1
+    
+    ug_gu_density = (ug_count + gu_count) * 100 / (length - 1) if length > 1 else 0
+    
+    # Only proceed if sequence has multiple strong indicators of problems
+    problem_score = 0
+    if c_percent < 18:
+        problem_score += 1
+    if motif_counts > 1: 
+        problem_score += 1
+    if ug_gu_density > 12:  
+        problem_score += 1
+    
+    # Only continue if very likely to be problematic
+    if problem_score >= 2:
+        correction = 400  # A fixed correction for catastrophic cases
+        calibrated_prediction = original_prediction + correction
+        return calibrated_prediction, correction, True
+    else:
+        # Return original prediction with no correction
+        return original_prediction, 0, False
 
 def predict_binding(sequence):
     """Standard binding prediction (without scaler for comparison)"""
@@ -462,25 +519,15 @@ elif page == "Sequence Analyzer":
     st.markdown("---")
     
     # ONLY scaler prediction button
-    scaler_analyze_button = st.button("📊 Scaler Prediction", type="primary", use_container_width=True)
-    
-    if scaler_analyze_button:
+    if st.button("📊 Scaler Prediction", type="primary", use_container_width=True):
         if sequence_input:
             sequence = sequence_input.strip().upper().replace('T', 'U')
             
-            if analyze_button:
-                score = predict_binding(sequence)
-                confidence = "High"
-                model_type = "Enhanced Feature-based"
-            elif scaler_analyze_button:
-                score = predict_binding_with_scaler(sequence)
-                confidence = "High" if os.path.exists("scaler.pkl") else "Medium"
-                model_type = "Enhanced Feature-based with Scaler"
-            else:  # ml_analyze_button
-                ml_result = predict_ml_score(sequence)
-                score = ml_result["RMSD_prediction"]
-                confidence = ml_result["confidence"]
-                model_type = "ML Model with Scaler Integration"
+            # Use ML model with scaler
+            ml_result = predict_ml_score(sequence)
+            score = ml_result["RMSD_prediction"]
+            confidence = ml_result["confidence"]
+            model_type = "ML Model with Scaler Integration"
             
             insights = generate_insights(sequence, score)
             
