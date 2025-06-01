@@ -729,8 +729,18 @@ elif page == "Dataset Insights":
         ax1.set_title("Multi-Pose Binding Analysis")
         
         quality_counts = display_df['Quality'].value_counts()
-        colors = ['#1B5E20', '#2E7D32', '#388E3C', '#FFA726', '#FF7043', '#D32F2F']
-        ax2.pie(quality_counts.values, labels=quality_counts.index, autopct='%1.1f%%', colors=colors[:len(quality_counts)])
+        # Define colors mapping - green for good, red for bad
+        quality_color_map = {
+            'Excellent': '#1B5E20',  # Dark green
+            'Great': '#2E7D32',      # Green  
+            'Good': '#388E3C',       # Light green
+            'Medium': '#FFA726',     # Orange
+            'Subpar': '#FF7043',     # Orange-red
+            'Poor': '#D32F2F'        # Red
+        }
+        # Get colors in the same order as quality_counts
+        colors = [quality_color_map[quality] for quality in quality_counts.index]
+        ax2.pie(quality_counts.values, labels=quality_counts.index, autopct='%1.1f%%', colors=colors)
         ax2.set_title("Quality Distribution")
         
         fig.tight_layout()
@@ -740,13 +750,17 @@ elif page == "Dataset Insights":
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("Total Sequences", "1,232")
-            st.metric("Great+ Binders", f"{len(display_df[display_df['Score'] < -7214.13])} ({len(display_df[display_df['Score'] < -7214.13])/len(display_df)*100:.1f}%)")
+            great_plus_count = len(display_df[display_df['Score'] < -7214.13])
+            great_plus_pct = (great_plus_count / len(display_df)) * 100
+            st.metric("Great+ Binders", f"{great_plus_count} ({great_plus_pct:.1f}%)")
         with col2:
             st.metric("Multi-Pose F-statistic", "8.8565")
             st.metric("Multi-Pose Threshold", "-7,214.13")
         with col3:
             st.metric("Statistical Significance", "p < 0.0001")
-            st.metric("Excellent Binders", f"{len(display_df[display_df['Score'] < -7400])} ({len(display_df[display_df['Score'] < -7400])/len(display_df)*100:.1f}%)")
+            excellent_count = len(display_df[display_df['Score'] < -7400])
+            excellent_pct = (excellent_count / len(display_df)) * 100
+            st.metric("Excellent Binders", f"{excellent_count} ({excellent_pct:.1f}%)")
             
     with tab2:
         st.markdown("### Enhanced Binding Factors")
