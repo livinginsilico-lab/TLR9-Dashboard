@@ -392,12 +392,20 @@ def generate_insights(sequence, score):
     
     insights = []
     
-    # Multi-pose threshold
+    # Multi-pose threshold with updated categories
     threshold = -7214.13
-    if score < threshold:
-        insights.append(f"✅ Good binder (below multi-pose threshold of {threshold})")
+    if score < -7400:
+        insights.append(f"✅ Excellent binder (well below multi-pose threshold of {threshold})")
+    elif score < threshold:
+        insights.append(f"✅ Great binder (below multi-pose threshold of {threshold})")
+    elif score < threshold + 50:
+        insights.append(f"Good binder (close to multi-pose threshold of {threshold})")
+    elif score < threshold + 150:
+        insights.append(f"Medium binder (within 150 points of threshold {threshold})")
+    elif score < threshold + 300:
+        insights.append(f"⚠️ Subpar binder (within 300 points of threshold {threshold})")
     else:
-        insights.append(f"⚠️ Poor binder (above multi-pose threshold of {threshold})")
+        insights.append(f"⚠️ Poor binder (well above multi-pose threshold of {threshold})")
     
     explanations = generate_explanations(sequence, features)
     insights.extend(explanations)
@@ -559,25 +567,26 @@ elif page == "Sequence Analyzer":
                 
                 insights = generate_insights(sequence, score)
                 
-                # Binding strength classification
-                if score < -7500:
-                    binding_strength = "Exceptional"
-                    strength_color = "#0D5016"
-                elif score < -7214.13:
-                    binding_strength = "Excellent" 
-                    strength_color = "#1B5E20"
-                elif score < -7000:
-                    binding_strength = "Strong"
-                    strength_color = "#2E7D32"
-                elif score < -6800:
-                    binding_strength = "Good"
-                    strength_color = "#388E3C"
-                elif score < -6600:
-                    binding_strength = "Moderate"
-                    strength_color = "#F57C00"
+                # Binding quality classification based on threshold proximity
+                threshold = -7214.13
+                if score < -7400:
+                    binding_quality = "Excellent"
+                    quality_color = "#1B5E20"
+                elif score < threshold:
+                    binding_quality = "Great"
+                    quality_color = "#2E7D32"
+                elif score < threshold + 50:  # Within 50 points of threshold
+                    binding_quality = "Good"
+                    quality_color = "#388E3C"
+                elif score < threshold + 150:  # Within 150 points of threshold
+                    binding_quality = "Medium"
+                    quality_color = "#FFA726"
+                elif score < threshold + 300:  # Within 300 points of threshold
+                    binding_quality = "Subpar"
+                    quality_color = "#FF7043"
                 else:
-                    binding_strength = "Weak"
-                    strength_color = "#D32F2F"
+                    binding_quality = "Poor"
+                    quality_color = "#D32F2F"
                 
                 st.markdown("### 🔬 ML Model Analysis Results")
                 
@@ -598,20 +607,8 @@ elif page == "Sequence Analyzer":
                     
                     st.markdown(f"""
                     <div class="metric-card">
-                        <h4>Binding Strength</h4>
-                        <h2 style="color:{strength_color};">{binding_strength}</h2>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    threshold = -7214.13
-                    is_good_binder = score < threshold
-                    binder_quality = "Good" if is_good_binder else "Poor"
-                    qualityColor = "#2e7d32" if is_good_binder else "#c62828"
-                    
-                    st.markdown(f"""
-                    <div class="metric-card">
                         <h4>Binding Quality</h4>
-                        <h2 style="color:{qualityColor};">{binder_quality}</h2>
+                        <h2 style="color:{quality_color};">{binding_quality}</h2>
                         <p>Multi-Pose Threshold: {threshold}</p>
                     </div>
                     """, unsafe_allow_html=True)
@@ -646,13 +643,17 @@ elif page == "Sequence Analyzer":
                     fig.tight_layout()
                     st.pyplot(fig)
                 
-                # Enhanced insights
+                # Enhanced insights with color coding
                 st.markdown("#### 🧠 Binding Insights")
                 for insight in insights:
-                    if "✅" in insight:
-                        st.markdown(f'<p class="insight-positive">{insight}</p>', unsafe_allow_html=True)
+                    # Check for beneficial terms (green)
+                    if any(term in insight.lower() for term in ["✅", "good binder", "high cytosine content", "high gc content", "beneficial motif", "enhances", "stronger binding"]):
+                        st.markdown(f'<p style="color: #2e7d32; font-weight: 500;">{insight}</p>', unsafe_allow_html=True)
+                    # Check for negative terms (red)  
+                    elif any(term in insight.lower() for term in ["⚠️", "poor binder", "low cytosine content", "low gc content", "problematic motif", "weakens", "weaker binding", "indicates weaker", "suggests weaker", "may reduce"]):
+                        st.markdown(f'<p style="color: #c62828; font-weight: 500;">{insight}</p>', unsafe_allow_html=True)
                     else:
-                        st.markdown(f'<p class="insight-negative">{insight}</p>', unsafe_allow_html=True)
+                        st.markdown(f'<p>{insight}</p>', unsafe_allow_html=True)
                 
                 # Show ML model details
                 if ml_result.get("calibrated", False):
