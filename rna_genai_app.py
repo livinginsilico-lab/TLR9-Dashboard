@@ -3,8 +3,14 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import torch
 import random
 import os
+import sys
+from contextlib import nullcontext
+
+# Make sure TOKENIZERS_PARALLELISM warning doesn't appear
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # Set page configuration
 st.set_page_config(
@@ -77,36 +83,24 @@ def setup_model_components():
             repo_id = 'HammadQ123/genai-compressed-final'
             model_filename = 'model_compressed.pt'
             
-            try:
-                from huggingface_hub import hf_hub_download
+            from huggingface_hub import hf_hub_download
+            
+            with st.spinner("🔄 Loading compressed model from HuggingFace..."):
+                st.info(f"📦 Downloading model: {model_filename} (610MB)")
                 
-                with st.spinner("🔄 Loading compressed model from HuggingFace..."):
-                    st.info(f"📦 Downloading model: {model_filename} (610MB)")
-                    
-                    model_path = hf_hub_download(
-                        repo_id=repo_id,
-                        filename=model_filename,
-                        cache_dir="./model_cache"
-                    )
-                    
-                    st.info("🔧 Loading model into memory...")
-                    st.session_state.model = torch.load(model_path, map_location='cpu')
-                    st.session_state.model_type = "compressed"
-                    st.session_state.model_loaded = True
-                    
-                    st.success("🚀 Compressed model loaded successfully! (610MB)")
+                model_path = hf_hub_download(
+                    repo_id=repo_id,
+                    filename=model_filename,
+                    cache_dir="./model_cache"
+                )
                 
-            except ImportError:
-                st.warning("HuggingFace Hub not available. Install: pip install huggingface_hub")
-                st.session_state.model_type = "feature_based"
+                st.info("🔧 Loading model into memory...")
+                st.session_state.model = torch.load(model_path, map_location='cpu')
+                st.session_state.model_type = "compressed"
                 st.session_state.model_loaded = True
                 
-            except Exception as e:
-                st.warning(f"Could not load compressed model: {str(e)}")
-                st.session_state.model_type = "feature_based"
-                st.session_state.model_loaded = True
-                st.info("📊 Using feature-based predictions")
-                
+                st.success("🚀 Compressed model loaded successfully! (610MB)")
+            
             # Load tokenizer from local directory OR download from HuggingFace
             tokenizer_loaded = False
             
@@ -143,99 +137,68 @@ def setup_model_components():
                     st.success("✅ HuggingFace tokenizer loaded successfully!")
                     
                 except Exception as e:
-                    st.warning(f"Could not load HuggingFace tokenizer: {str(e)}")
+                    st.error(f"Could not load HuggingFace tokenizer: {str(e)}")
                     st.session_state.tokenizer = None
             
             if not tokenizer_loaded and st.session_state.tokenizer is None:
                 st.session_state.tokenizer = None
-                if st.session_state.model_type == "compressed":
-                    st.warning("⚠️ Tokenizer not available - ML predictions may be limited")
+                st.error("⚠️ Tokenizer not available - cannot proceed without tokenizer")
+                st.session_state.model_loaded = False
                 
         except Exception as e:
-            st.error(f"Error in model setup: {str(e)}")
-            st.session_state.model_type = "feature_based"
-            st.session_state.model_loaded = True
+            st.error(f"Critical error in model setup: {str(e)}")
+            st.error("Please ensure huggingface_hub and transformers are installed:")
+            st.code("pip install huggingface_hub transformers torch")
+            st.session_state.model_loaded = False
             st.session_state.tokenizer = None
 
 def predict_ml_score(sequence):
-    """ML prediction using compressed model"""
+    """ML prediction using compressed model - GenAI ONLY"""
     setup_model_components()
     
-    if not st.session_state.model_loaded:
-        return {"RMSD_prediction": -7200, "confidence": "Low"}
+    if not st.session_state.model_loaded or not st.session_state.tokenizer:
+        st.error("🚨 GenAI model not loaded. Please check model status on Home page.")
+        return {"RMSD_prediction": -9999, "confidence": "Failed - Model Not Loaded"}
     
     try:
-        if st.session_state.model_type == "compressed" and st.session_state.tokenizer:
-            # Use compressed ML model
-            try:
-                inputs = st.session_state.tokenizer(
-                    sequence, 
-                    return_tensors="pt", 
-                    padding=True, 
-                    truncation=True,
-                    max_length=512
-                )
-                
-                with torch.no_grad():
-                    # Make sure model is in eval mode
-                    st.session_state.model.eval()
-                    outputs = st.session_state.model(**inputs)
-                    
-                    # Extract prediction - handle different output formats
-                    if hasattr(outputs, 'logits'):
-                        scaled_prediction = outputs.logits.item()
-                    elif isinstance(outputs, torch.Tensor):
-                        scaled_prediction = outputs.item()
-                    else:
-                        # If outputs is a tuple or list, get the first element
-                        scaled_prediction = outputs[0].item()
-                
-                # Apply scaler if available
-                scaler_path = "scaler.pkl"
-                if os.path.exists(scaler_path):
-                    import pickle
-                    scaler = pickle.load(open(scaler_path, 'rb'))
-                    original_prediction = scaler.inverse_transform([[scaled_prediction]])[0][0]
-                else:
-                    # Approximate inverse scaling
-                    original_prediction = (scaled_prediction * 2000) - 7500
-                
-                return {"RMSD_prediction": original_prediction, "confidence": "High"}
-                
-            except Exception as model_error:
-                st.error(f"ML model error: {str(model_error)}")
-                # Fall back to feature-based prediction
-                pass
+        # Use compressed ML model
+        inputs = st.session_state.tokenizer(
+            sequence, 
+            return_tensors="pt", 
+            padding=True, 
+            truncation=True,
+            max_length=512
+        )
         
-        # Feature-based prediction fallback
-        features = extract_sequence_features(sequence)
-        base_score = -7200
-        
-        if features['c_percent'] > 25:
-            base_score -= random.uniform(100, 160)
-        elif features['c_percent'] < 18:
-            base_score += random.uniform(200, 300)
-        
-        if features['gc_content'] > 50:
-            base_score -= random.uniform(75, 125)
+        with torch.no_grad():
+            # Make sure model is in eval mode
+            st.session_state.model.eval()
+            outputs = st.session_state.model(**inputs)
             
-        if features['good_motifs']:
-            base_score -= len(features['good_motifs']) * random.uniform(50, 100)
-            
-        if features['problem_motifs']:
-            base_score += len(features['problem_motifs']) * random.uniform(75, 150)
-            
-        if features['ug_gu_density'] > 12:
-            base_score += random.uniform(100, 200)
+            # Extract prediction - handle different output formats
+            if hasattr(outputs, 'logits'):
+                scaled_prediction = outputs.logits.item()
+            elif isinstance(outputs, torch.Tensor):
+                scaled_prediction = outputs.item()
+            else:
+                # If outputs is a tuple or list, get the first element
+                scaled_prediction = outputs[0].item()
         
-        base_score += len(features['position_matches']) * random.uniform(25, 75)
-        base_score += random.normalvariate(0, 150)
+        # Apply scaler if available
+        scaler_path = "scaler.pkl"
+        if os.path.exists(scaler_path):
+            import pickle
+            scaler = pickle.load(open(scaler_path, 'rb'))
+            original_prediction = scaler.inverse_transform([[scaled_prediction]])[0][0]
+        else:
+            # Approximate inverse scaling
+            original_prediction = (scaled_prediction * 2000) - 7500
         
-        return {"RMSD_prediction": base_score, "confidence": "Medium (Feature-based fallback)"}
-            
+        return {"RMSD_prediction": original_prediction, "confidence": "High (GenAI Model)"}
+        
     except Exception as e:
-        st.error(f"Prediction error: {str(e)}")
-        return {"RMSD_prediction": -7200, "confidence": "Low"}
+        st.error(f"GenAI model prediction error: {str(e)}")
+        return {"RMSD_prediction": -9999, "confidence": "Failed - Prediction Error"}
 
 # Helper functions for sequence analysis
 def extract_sequence_features(sequence):
@@ -481,25 +444,18 @@ if page == "Home":
         """, unsafe_allow_html=True)
         
         setup_model_components()
-        if st.session_state.model_loaded:
-            if st.session_state.model_type == "compressed":
-                st.success("🚀 Compressed ML Model Active")
-                st.markdown("- High accuracy predictions")
-                st.markdown("- Compressed model (610MB)")
-                st.markdown("- Repository: genai-compressed-final")
-                if st.session_state.tokenizer:
-                    st.markdown("- ✅ Tokenizer loaded (padding fixed)")
-                else:
-                    st.markdown("- ⚠️ Tokenizer not available")
-                if os.path.exists("scaler.pkl"):
-                    st.markdown("- ✅ scaler.pkl detected")
-            else:
-                st.info("📊 Feature-Based Model Active")
-                st.markdown("- Enhanced feature predictions")
-                st.markdown("- Compressed ML model available")
-                st.markdown("- Will attempt ML loading on next interaction")
+        if st.session_state.model_loaded and st.session_state.tokenizer:
+            st.success("🚀 GenAI Model Active")
+            st.markdown("- ✅ Compressed model loaded (610MB)")
+            st.markdown("- ✅ Repository: genai-compressed-final")
+            st.markdown("- ✅ Tokenizer loaded (padding fixed)")
+            if os.path.exists("scaler.pkl"):
+                st.markdown("- ✅ scaler.pkl detected")
         else:
-            st.error("❌ Model Loading Failed")
+            st.error("❌ GenAI Model Failed to Load")
+            st.markdown("**Required dependencies:**")
+            st.code("pip install torch transformers huggingface_hub")
+            st.markdown("**Please refresh page after installing dependencies**")
         
         # Sample visualization
         st.markdown('<h4>Sample Score Distribution</h4>', unsafe_allow_html=True)
@@ -576,10 +532,25 @@ elif page == "GenAI Generation Tool":
             placeholder="GAAGAGAUAAUCUGAAACAACA..."
         )
         
-        if st.button("🔬 Analyze Sequence", use_container_width=True):
+        col_pred1, col_pred2 = st.columns(2)
+        with col_pred1:
+            predict_button = st.button("🔬 Traditional Analysis", use_container_width=True)
+        with col_pred2:
+            ml_predict_button = st.button("🤖 GenAI Prediction", use_container_width=True)
+        
+        if predict_button or ml_predict_button:
             if predict_sequence:
                 clean_sequence = predict_sequence.strip().upper().replace('T', 'U')
-                score = predict_binding(clean_sequence)
+                
+                if ml_predict_button:
+                    ml_result = predict_ml_score(clean_sequence)
+                    score = ml_result["RMSD_prediction"]
+                    confidence = ml_result["confidence"]
+                    model_used = "GenAI Model"
+                else:
+                    score = predict_binding(clean_sequence)
+                    confidence = "High"
+                    model_used = "Traditional"
                 
                 if score < -7214.13:
                     quality = "Excellent Binder"
@@ -596,6 +567,8 @@ elif page == "GenAI Generation Tool":
                     <h4>Analysis Result</h4>
                     <h2 style="color: {color};">{score:.2f}</h2>
                     <p><strong>Quality:</strong> {quality}</p>
+                    <p><strong>Model:</strong> {model_used}</p>
+                    <p><strong>Confidence:</strong> {confidence}</p>
                     <p><strong>Multi-Pose Threshold:</strong> -7214.13</p>
                 </div>
                 """, unsafe_allow_html=True)
@@ -649,7 +622,7 @@ elif page == "GenAI Generation Tool":
                     scored_sequences.sort(key=lambda x: x[1])
                     generated_sequences = [seq for seq, score in scored_sequences[:num_samples]]
                 
-                # Calculate predictions for both traditional and ML
+                # Calculate predictions for both traditional and GenAI ML
                 predictions = []
                 ml_predictions = []
                 
@@ -657,14 +630,14 @@ elif page == "GenAI Generation Tool":
                     score = predict_binding(seq)
                     predictions.append(score)
                     
-                    # Get ML prediction
+                    # Get GenAI ML prediction
                     ml_result = predict_ml_score(seq)
                     ml_predictions.append(ml_result["RMSD_prediction"])
                 
                 st.session_state.generated_data = pd.DataFrame({
                     "Generated Sequence": generated_sequences,
                     "Traditional Score": predictions,
-                    "ML Score": ml_predictions,
+                    "GenAI Score": ml_predictions,
                     "Sequence Length": [len(seq) for seq in generated_sequences]
                 })
         
@@ -672,8 +645,8 @@ elif page == "GenAI Generation Tool":
             df_gen = st.session_state.generated_data
             
             # Add quality classification
-            def get_quality(trad_score, ml_score):
-                avg_score = (trad_score + ml_score) / 2
+            def get_quality(trad_score, genai_score):
+                avg_score = (trad_score + genai_score) / 2
                 if avg_score < -7500:
                     return "Exceptional"
                 elif avg_score < -7214.13:
@@ -686,7 +659,7 @@ elif page == "GenAI Generation Tool":
                     return "Moderate"
                 
             df_gen["Quality"] = df_gen.apply(
-                lambda row: get_quality(row["Traditional Score"], row["ML Score"]), 
+                lambda row: get_quality(row["Traditional Score"], row["GenAI Score"]), 
                 axis=1
             )
             
@@ -703,7 +676,7 @@ elif page == "GenAI Generation Tool":
             
             styled_df = df_gen.style.format({
                 "Traditional Score": "{:.2f}",
-                "ML Score": "{:.2f}",
+                "GenAI Score": "{:.2f}",
                 "Sequence Length": "{:.0f}"
             }).applymap(highlight_quality, subset=["Quality"])
             
@@ -715,7 +688,7 @@ elif page == "GenAI Generation Tool":
                 selected_idx = st.selectbox(
                     "Select sequence for detailed analysis:",
                     options=range(len(df_gen)),
-                    format_func=lambda x: f"Seq {x+1}: {df_gen['Quality'].iloc[x]} (T:{df_gen['Traditional Score'].iloc[x]:.1f} | ML:{df_gen['ML Score'].iloc[x]:.1f})"
+                    format_func=lambda x: f"Seq {x+1}: {df_gen['Quality'].iloc[x]} (T:{df_gen['Traditional Score'].iloc[x]:.1f} | GenAI:{df_gen['GenAI Score'].iloc[x]:.1f})"
                 )
                 
                 selected_seq = df_gen["Generated Sequence"].iloc[selected_idx]
@@ -746,7 +719,7 @@ elif page == "GenAI Generation Tool":
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    fasta_content = f">Generated_Sequence_{selected_idx+1}|Quality_{df_gen['Quality'].iloc[selected_idx]}|TradScore_{df_gen['Traditional Score'].iloc[selected_idx]:.2f}|MLScore_{df_gen['ML Score'].iloc[selected_idx]:.2f}\n{selected_seq}"
+                    fasta_content = f">Generated_Sequence_{selected_idx+1}|Quality_{df_gen['Quality'].iloc[selected_idx]}|TradScore_{df_gen['Traditional Score'].iloc[selected_idx]:.2f}|GenAIScore_{df_gen['GenAI Score'].iloc[selected_idx]:.2f}\n{selected_seq}"
                     st.download_button(
                         label="📄 Download FASTA",
                         data=fasta_content,
@@ -769,17 +742,17 @@ elif page == "GenAI Generation Tool":
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
-                    avg_score = (df_gen["Traditional Score"].mean() + df_gen["ML Score"].mean()) / 2
+                    avg_score = (df_gen["Traditional Score"].mean() + df_gen["GenAI Score"].mean()) / 2
                     st.metric("Average Score", f"{avg_score:.2f}")
                 
                 with col2:
-                    good_binders = len(df_gen[(df_gen["Traditional Score"] < -7214.13) | (df_gen["ML Score"] < -7214.13)])
+                    good_binders = len(df_gen[(df_gen["Traditional Score"] < -7214.13) | (df_gen["GenAI Score"] < -7214.13)])
                     st.metric("Good Binders", f"{good_binders}/{len(df_gen)}")
                 
                 with col3:
                     best_trad = df_gen["Traditional Score"].min()
-                    best_ml = df_gen["ML Score"].min()
-                    best_overall = min(best_trad, best_ml)
+                    best_genai = df_gen["GenAI Score"].min()
+                    best_overall = min(best_trad, best_genai)
                     st.metric("Best Score", f"{best_overall:.2f}")
                     
         else:
@@ -790,7 +763,7 @@ elif page == "GenAI Generation Tool":
             example_data = {
                 "Example": ["High-Quality", "Balanced", "Creative"],
                 "Traditional Score": [-7350.2, -7180.5, -6950.8],
-                "ML Score": [-7385.1, -7165.3, -6975.2],
+                "GenAI Score": [-7385.1, -7165.3, -6975.2],
                 "Quality": ["Excellent", "Strong", "Good"]
             }
             example_df = pd.DataFrame(example_data)
