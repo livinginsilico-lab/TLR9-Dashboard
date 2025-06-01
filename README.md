@@ -1,3 +1,5 @@
 # TLR9-Dashboard
 
-Access the dashboard here: https://tlr9-dashboard-ficefn3qhv32idg7gf5li2.streamlit.app/ 
+Access the predictive RNA dashboard here: https://tlr9-dashboard-2jz7nxmw9nhcttdpiep2ga.streamlit.app/
+
+Access the GenAI RNA dashboard here: 
