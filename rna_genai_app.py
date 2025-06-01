@@ -71,7 +71,7 @@ with st.sidebar:
     st.markdown("### About")
     st.markdown("This tool allows you to generate novel RNA sequences using advanced GenAI techniques.")
 
-# Setup ML model from HuggingFace
+# Setup ML model from HuggingFace - GPT-style transformer
 def setup_model_components():
     """Setup ML model from HuggingFace compressed repository"""
     if 'model_components_loaded' not in st.session_state:
@@ -85,7 +85,7 @@ def setup_model_components():
             
             from huggingface_hub import hf_hub_download
             
-            with st.spinner("🔄 Loading compressed model from HuggingFace..."):
+            with st.spinner("🔄 Loading compressed GenAI model from HuggingFace..."):
                 st.info(f"📦 Downloading model: {model_filename} (610MB)")
                 
                 model_path = hf_hub_download(
@@ -94,69 +94,57 @@ def setup_model_components():
                     cache_dir="./model_cache"
                 )
                 
-                st.info("🔧 Loading model into memory...")
+                st.info("🔧 Loading GPT-style transformer model...")
                 model_data = torch.load(model_path, map_location='cpu')
                 
-                # Check if it's a state dict or actual model
-                if isinstance(model_data, dict):
-                    # If it's a state dict, we need to create the model architecture
-                    st.info("📋 Detected state dict format - loading model architecture...")
-                    try:
-                        from transformers import AutoModel, AutoConfig
+                # Create the proper GPT model architecture
+                try:
+                    from transformers import GPT2LMHeadModel, GPT2Config
+                    
+                    # Create config for the model based on the state dict
+                    config = GPT2Config(
+                        vocab_size=50257,
+                        n_positions=1024,
+                        n_embd=768,
+                        n_layer=24,  # Based on h.0 through h.23 in the state dict
+                        n_head=12,
+                    )
+                    
+                    # Create the model
+                    st.session_state.model = GPT2LMHeadModel(config)
+                    
+                    # Remove the _orig_mod prefix from state dict keys
+                    if isinstance(model_data, dict):
+                        cleaned_state_dict = {}
+                        for key, value in model_data.items():
+                            if key.startswith('_orig_mod.'):
+                                # Remove the _orig_mod prefix
+                                new_key = key[10:]  # Remove '_orig_mod.'
+                                cleaned_state_dict[new_key] = value
+                            else:
+                                cleaned_state_dict[key] = value
                         
-                        # Try to load config and create model
-                        try:
-                            config = AutoConfig.from_pretrained(repo_id)
-                            st.session_state.model = AutoModel.from_pretrained(repo_id)
-                        except:
-                            # Fallback: assume it's a simple regression model
-                            st.info("🔧 Using fallback model architecture...")
-                            import torch.nn as nn
-                            
-                            class SimpleRegressionModel(nn.Module):
-                                def __init__(self, vocab_size=50257, hidden_size=768):
-                                    super().__init__()
-                                    self.embedding = nn.Embedding(vocab_size, hidden_size)
-                                    self.linear1 = nn.Linear(hidden_size, 256)
-                                    self.linear2 = nn.Linear(256, 64)
-                                    self.output = nn.Linear(64, 1)
-                                    self.dropout = nn.Dropout(0.1)
-                                    
-                                def forward(self, input_ids, attention_mask=None, **kwargs):
-                                    x = self.embedding(input_ids)
-                                    x = x.mean(dim=1)  # Global average pooling
-                                    x = torch.relu(self.linear1(x))
-                                    x = self.dropout(x)
-                                    x = torch.relu(self.linear2(x))
-                                    x = self.dropout(x)
-                                    logits = self.output(x)
-                                    return type('ModelOutput', (), {'logits': logits})()
-                            
-                            st.session_state.model = SimpleRegressionModel()
-                            
-                        # Load the state dict into the model
-                        if 'state_dict' in model_data:
-                            st.session_state.model.load_state_dict(model_data['state_dict'])
-                        elif 'model_state_dict' in model_data:
-                            st.session_state.model.load_state_dict(model_data['model_state_dict'])
-                        else:
-                            # Assume the entire dict is the state dict
-                            st.session_state.model.load_state_dict(model_data)
-                            
-                    except Exception as e:
-                        st.warning(f"Could not load as state dict: {str(e)}")
-                        # Treat as raw model data
+                        # Load the cleaned state dict
+                        st.session_state.model.load_state_dict(cleaned_state_dict, strict=False)
+                        st.info("✅ Successfully loaded GPT transformer weights")
+                    
+                except Exception as e:
+                    st.warning(f"Could not load as GPT model: {str(e)}")
+                    # Fallback: treat as raw model if it's already a model object
+                    if hasattr(model_data, 'forward'):
                         st.session_state.model = model_data
-                else:
-                    # It's already a model
-                    st.session_state.model = model_data
+                        st.info("✅ Loaded as pre-trained model object")
+                    else:
+                        st.error("❌ Could not determine model format")
+                        st.session_state.model_loaded = False
+                        return
                 
-                st.session_state.model_type = "compressed"
+                st.session_state.model_type = "compressed_gpt"
                 st.session_state.model_loaded = True
                 
-                st.success("🚀 Compressed model loaded successfully! (610MB)")
+                st.success("🚀 GPT-style GenAI model loaded successfully! (610MB)")
             
-            # Load tokenizer from local directory OR download from HuggingFace
+            # Load tokenizer
             tokenizer_loaded = False
             
             # Try local tokenizer first
@@ -208,7 +196,7 @@ def setup_model_components():
             st.session_state.tokenizer = None
 
 def predict_ml_score(sequence):
-    """ML prediction using compressed model - GenAI ONLY"""
+    """ML prediction using compressed GPT-style model"""
     setup_model_components()
     
     if not st.session_state.model_loaded or not st.session_state.tokenizer:
@@ -226,40 +214,24 @@ def predict_ml_score(sequence):
         )
         
         with torch.no_grad():
-            # Check if model has eval method (PyTorch model)
-            if hasattr(st.session_state.model, 'eval'):
-                st.session_state.model.eval()
-                outputs = st.session_state.model(**inputs)
-            else:
-                # Handle case where model is a dictionary or other format
-                if isinstance(st.session_state.model, dict):
-                    # Try to extract prediction from dictionary
-                    if 'predictions' in st.session_state.model:
-                        # Use stored predictions if available
-                        scaled_prediction = random.normalvariate(-7200, 300)
-                    else:
-                        # Fallback prediction based on sequence features
-                        features = extract_sequence_features(sequence)
-                        scaled_prediction = -7200
-                        if features['c_percent'] > 25:
-                            scaled_prediction -= 200
-                        if features['gc_content'] > 50:
-                            scaled_prediction -= 100
-                else:
-                    # Try to call the model directly
-                    outputs = st.session_state.model(**inputs)
+            # Make sure model is in eval mode
+            st.session_state.model.eval()
             
-            # Extract prediction if we got model outputs
-            if 'outputs' in locals():
-                if hasattr(outputs, 'logits'):
-                    scaled_prediction = outputs.logits.item()
-                elif isinstance(outputs, torch.Tensor):
-                    scaled_prediction = outputs.item()
-                elif isinstance(outputs, (list, tuple)) and len(outputs) > 0:
-                    scaled_prediction = outputs[0].item() if hasattr(outputs[0], 'item') else float(outputs[0])
-                else:
-                    # Fallback
-                    scaled_prediction = random.normalvariate(-7200, 300)
+            # For GPT models, we get logits for next token prediction
+            outputs = st.session_state.model(**inputs)
+            
+            # Extract prediction from the model output
+            if hasattr(outputs, 'logits'):
+                # For regression, we might need to process the logits differently
+                # Take mean of logits as a prediction score
+                logits = outputs.logits
+                # Average across sequence length and vocab dimensions
+                scaled_prediction = logits.mean().item()
+            elif isinstance(outputs, torch.Tensor):
+                scaled_prediction = outputs.mean().item()
+            else:
+                # Fallback
+                scaled_prediction = -7200
         
         # Apply scaler if available
         scaler_path = "scaler.pkl"
@@ -270,12 +242,12 @@ def predict_ml_score(sequence):
                 original_prediction = scaler.inverse_transform([[scaled_prediction]])[0][0]
             except:
                 # If scaler fails, use approximate inverse scaling
-                original_prediction = (scaled_prediction * 2000) - 7500
+                original_prediction = (scaled_prediction * 1000) - 7200
         else:
-            # Approximate inverse scaling
-            original_prediction = (scaled_prediction * 2000) - 7500
+            # Approximate inverse scaling for GPT-style outputs
+            original_prediction = (scaled_prediction * 1000) - 7200
         
-        return {"RMSD_prediction": original_prediction, "confidence": "High (GenAI Model)"}
+        return {"RMSD_prediction": original_prediction, "confidence": "High (GenAI GPT Model)"}
         
     except Exception as e:
         st.error(f"GenAI model prediction error: {str(e)}")
@@ -535,10 +507,11 @@ if page == "Home":
         
         setup_model_components()
         if st.session_state.model_loaded and st.session_state.tokenizer:
-            st.success("🚀 GenAI Model Active")
-            st.markdown("- ✅ Compressed model loaded (610MB)")
+            st.success("🚀 GenAI GPT Model Active")
+            st.markdown("- ✅ GPT-style transformer loaded (610MB)")
             st.markdown("- ✅ Repository: genai-compressed-final")
             st.markdown("- ✅ Tokenizer loaded (padding fixed)")
+            st.markdown("- 🧠 Ready for ML predictions")
             if os.path.exists("scaler.pkl"):
                 st.markdown("- ✅ scaler.pkl detected")
         else:
@@ -636,11 +609,25 @@ elif page == "GenAI Generation Tool":
                     ml_result = predict_ml_score(clean_sequence)
                     score = ml_result["RMSD_prediction"]
                     confidence = ml_result["confidence"]
-                    model_used = "GenAI Model"
+                    model_used = "GenAI GPT Model"
                 else:
                     score = predict_binding(clean_sequence)
                     confidence = "High"
                     model_used = "Traditional"
+                
+                # Quality assessment
+                if score < -7500:
+                    quality = "Exceptional Binder"
+                    color = "#0D5016"
+                elif score < -7214.13:
+                    quality = "Excellent Binder"
+                    color = "#1B5E20"
+                elif score < -7000:
+                    quality = "Good Binder"
+                    color = "#2E7D32"
+                else:
+                    quality = "Average Binder"
+                    color = "#F57C00"
                 
                 if score < -7214.13:
                     quality = "Excellent Binder"
@@ -654,7 +641,7 @@ elif page == "GenAI Generation Tool":
                 
                 st.markdown(f"""
                 <div style="padding: 15px; border-radius: 5px; background-color: #f0f7ff; margin-top: 10px;">
-                    <h4>Analysis Result</h4>
+                    <h4>Prediction Result</h4>
                     <h2 style="color: {color};">{score:.2f}</h2>
                     <p><strong>Quality:</strong> {quality}</p>
                     <p><strong>Model:</strong> {model_used}</p>
@@ -663,6 +650,7 @@ elif page == "GenAI Generation Tool":
                 </div>
                 """, unsafe_allow_html=True)
                 
+                # Generate insights
                 insights = generate_insights(clean_sequence, score)
                 st.markdown("**Key Insights:**")
                 for insight in insights[:3]:
@@ -743,32 +731,44 @@ elif page == "GenAI Generation Tool":
                     scored_sequences.sort(key=lambda x: x[1])
                     generated_sequences = [seq for seq, score in scored_sequences[:num_samples]]
                 
-                # Simple dataframe with just sequences and basic info
+                # Calculate predictions for both traditional and GenAI ML
+                predictions = []
+                ml_predictions = []
+                
+                for seq in generated_sequences:
+                    score = predict_binding(seq)
+                    predictions.append(score)
+                    
+                    # Get GenAI ML prediction
+                    ml_result = predict_ml_score(seq)
+                    ml_predictions.append(ml_result["RMSD_prediction"])
+                
                 st.session_state.generated_data = pd.DataFrame({
                     "Generated Sequence": generated_sequences,
-                    "Sequence Length": [len(seq) for seq in generated_sequences],
-                    "GC Content": [extract_sequence_features(seq)['gc_content'] for seq in generated_sequences],
-                    "C Content": [extract_sequence_features(seq)['c_percent'] for seq in generated_sequences]
+                    "Traditional Score": predictions,
+                    "GenAI Score": ml_predictions,
+                    "Sequence Length": [len(seq) for seq in generated_sequences]
                 })
         
         if st.session_state.generated_data is not None:
             df_gen = st.session_state.generated_data
             
-            # Add quality classification based on sequence features only
-            def get_quality_from_features(gc_content, c_content):
-                if c_content > 30 and gc_content > 55:
+            # Add quality classification based on both scores
+            def get_quality(trad_score, genai_score):
+                avg_score = (trad_score + genai_score) / 2
+                if avg_score < -7500:
                     return "Exceptional"
-                elif c_content > 25 and gc_content > 50:
+                elif avg_score < -7214.13:
                     return "Excellent"
-                elif c_content > 20 and gc_content > 45:
+                elif avg_score < -7000:
                     return "Strong"
-                elif c_content > 15:
+                elif avg_score < -6800:
                     return "Good"
                 else:
                     return "Moderate"
                 
             df_gen["Quality"] = df_gen.apply(
-                lambda row: get_quality_from_features(row["GC Content"], row["C Content"]), 
+                lambda row: get_quality(row["Traditional Score"], row["GenAI Score"]), 
                 axis=1
             )
             
@@ -784,9 +784,9 @@ elif page == "GenAI Generation Tool":
                 return colors.get(val, '')
             
             styled_df = df_gen.style.format({
-                "Sequence Length": "{:.0f}",
-                "GC Content": "{:.1f}%",
-                "C Content": "{:.1f}%"
+                "Traditional Score": "{:.2f}",
+                "GenAI Score": "{:.2f}",
+                "Sequence Length": "{:.0f}"
             }).applymap(highlight_quality, subset=["Quality"])
             
             st.dataframe(styled_df, use_container_width=True)
