@@ -541,6 +541,17 @@ elif page == "Sequence Analyzer":
         help="Enter a sequence composed of A, U, G, C nucleotides"
     )
     
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("Example: Strong Binder", use_container_width=True):
+            sequence_input = "CCUGGGAAGAGAUAAUCUGAAACAACAGUAUAUGACUCAAACUCUCCCUGCUCCCUGCCGGGUCCAAGAAGGGA"
+    with col2:
+        if st.button("Example: Weak Binder", use_container_width=True):
+            sequence_input = "AUAUAUAUAUAUAUGUGUGUGUGUGUGUGUGAAAAAAAAAUAUAUAUAUUAUAUAUAUAUAUAUGUGUGUGA"
+    with col3:
+        if st.button("Example: Average Binder", use_container_width=True):
+            sequence_input = "GAAGAGAUAAUCUGAAACAACAGUAUAUGACUCAAACUCUCCCUGCUCCCUGCCGAAAAAAAAAAAAAAAAAA"
+    
     st.markdown("---")
     
     # ML model prediction button
