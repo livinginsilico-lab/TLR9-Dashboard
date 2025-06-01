@@ -221,6 +221,11 @@ def setup_model_components():
                     local_files_only=True
                 )
                 
+                # Fix padding token issue (common with GPT2 tokenizer)
+                if st.session_state.tokenizer.pad_token is None:
+                    st.session_state.tokenizer.pad_token = st.session_state.tokenizer.eos_token
+                    st.session_state.model.config.pad_token_id = st.session_state.model.config.eos_token_id
+                
                 # Load the scaler
                 with open(scaler_path, 'rb') as f:
                     st.session_state.scaler = pickle.load(f)
