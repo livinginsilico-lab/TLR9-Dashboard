@@ -170,85 +170,41 @@ def generate_explanations(sequence, features):
     
     return explanations
 
-# Enhanced binding prediction with scaler integration (SIMPLIFIED)
-def predict_binding_with_scaler(sequence):
-    """Enhanced binding prediction - Feature-based approach with realistic scoring"""
-    features = extract_sequence_features(sequence)
-    if not features:
-        return -7200
-    
-    # Start with a base score that varies with sequence length and composition
-    base_score = -7100 - (features['length'] * 0.5)  # Longer sequences tend to bind better
-    
-    # Apply enhanced adjustments based on research findings from the notebook
-    
-    # Cytosine content is the strongest predictor (correlation = 0.29)
-    if features['c_percent'] > 28:  # Very high C content (like poorly predicted sequences)
-        base_score += 200  # Worse binding
-    elif features['c_percent'] > 25:  # High C content
-        base_score -= 150  # Better binding
-    elif features['c_percent'] < 18:  # Very low C content
-        base_score += 300  # Much worse binding
-    
-    # GC content effects
-    if features['gc_content'] > 55:
-        base_score -= 100  # Better structural stability
-    elif features['gc_content'] < 40:
-        base_score += 150  # Poor structural stability
-    
-    # Beneficial motifs (from notebook analysis)
-    beneficial_motifs = ['AGAAGG', 'UGAAGU', 'CAAGAA', 'AAGAAG', 'AGGAAG', 'AAGGCA']
-    beneficial_count = 0
-    for motif in beneficial_motifs:
-        beneficial_count += sequence.count(motif)
-    base_score -= beneficial_count * 50  # Each beneficial motif improves binding
-    
-    # Problematic motifs (especially CACACA patterns from notebook)
-    problematic_motifs = ['CACACA', 'ACACAC', 'UGGUGA', 'GUGAUG']
-    problematic_count = 0
-    for motif in problematic_motifs:
-        problematic_count += sequence.count(motif)
-    base_score += problematic_count * 80  # Each problematic motif worsens binding
-    
-    # UG/GU density (higher density = worse binding)
-    if features['ug_gu_density'] > 15:
-        base_score += 200
-    elif features['ug_gu_density'] > 12:
-        base_score += 100
-    
-    # Position-specific effects
-    base_score += len(features['position_matches']) * 30
-    
-    # Add some realistic variation based on sequence hash for consistency
-    import hashlib
-    seq_hash = int(hashlib.md5(sequence.encode()).hexdigest()[:8], 16)
-    variation = (seq_hash % 200) - 100  # ±100 variation
-    base_score += variation
-    
-    # Ensure score stays in realistic range
-    base_score = max(min(base_score, -6000), -8500)
-    
-    return base_score
+
 
 # Setup ML model and tokenizer (EXACT from your notebook)
 def setup_model_components():
-    """Setup the EXACT model and tokenizer from your notebook"""
+    """Setup the EXACT model and tokenizer from your notebook - ML MODEL ONLY"""
     if 'model_components_loaded' not in st.session_state:
         st.session_state.model_components_loaded = True
         st.session_state.model_loaded = False
         
         try:
-            # Check for both updated_model folder and scaler.pkl
+            # Check for required files
             model_path = "updated_model"
             scaler_path = "scaler.pkl"
             tokenizer_path = "tokenizer"
             
+            # All files must exist for ML model to work
             if os.path.exists(model_path) and os.path.exists(scaler_path) and os.path.exists(tokenizer_path):
                 from transformers import AutoTokenizer, GPT2ForSequenceClassification
+                import warnings
+                warnings.filterwarnings("ignore")
                 
-                # Load model and tokenizer exactly as in your notebook
-                st.session_state.model = GPT2ForSequenceClassification.from_pretrained(model_path)
-                st.session_state.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+                st.info("🔄 Loading ML model and scaler...")
+                
+                # Load model from your updated_model folder
+                st.session_state.model = GPT2ForSequenceClassification.from_pretrained(
+                    model_path,
+                    local_files_only=True,
+                    trust_remote_code=False
+                )
+                
+                # Load tokenizer
+                st.session_state.tokenizer = AutoTokenizer.from_pretrained(
+                    tokenizer_path,
+                    local_files_only=True
+                )
                 
                 # Load the scaler
                 with open(scaler_path, 'rb') as f:
@@ -269,54 +225,68 @@ def setup_model_components():
                 
                 st.session_state.model_type = "no_model"
                 st.session_state.model_loaded = False
-                st.error(f"❌ Missing files: {', '.join(missing_files)}")
+                st.error(f"❌ ML Model requires: {', '.join(missing_files)}")
+                st.warning("⚠️ Upload all required files to use ML predictions")
                 
         except Exception as e:
-            st.error(f"❌ Error loading model: {str(e)}")
             st.session_state.model_loaded = False
+            st.error(f"❌ Error loading ML model: {str(e)}")
+            st.info("📁 Ensure your updated_model folder contains: config.json, pytorch_model.bin or model.safetensors")
 
-# Prediction function that uses feature-based approach when ML model is not available
+# ML model prediction ONLY - no fallback
 def predict_ml_score(sequence):
-    """Prediction method - uses ML model with scaler if available, otherwise enhanced feature-based"""
+    """ML model prediction ONLY - uses your trained model with scaler from Kaggle"""
     setup_model_components()
     
-    # First try ML model with scaler
-    if hasattr(st.session_state, 'model_loaded') and st.session_state.model_loaded:
-        try:
-            # Get the global model, tokenizer, and scaler
-            model = st.session_state.model
-            tokenizer = st.session_state.tokenizer
-            scaler = st.session_state.scaler
-            
-            # Tokenize the sequence
-            inputs = tokenizer(sequence, return_tensors="pt", padding=True, truncation=True, max_length=128)
-            
-            # Make prediction with the model
-            with torch.no_grad():
-                outputs = model(**inputs).logits
-            
-            scaled_prediction = outputs.item()
-            # Use the scaler to transform back to original scale
-            original_prediction = scaler.inverse_transform([[scaled_prediction]])[0][0]
-            
-            # Apply the catastrophic calibration from the notebook if needed
-            calibrated_prediction, correction, was_calibrated = catastrophic_only_calibration(original_prediction, sequence)
-            
-            return {"RMSD_prediction": calibrated_prediction, "confidence": "High (ML Model)"}
-                
-        except Exception as e:
-            st.error(f"ML Prediction error: {str(e)}")
-            # Fall back to feature-based prediction
-            pass
+    # Only proceed if ML model is loaded
+    if not hasattr(st.session_state, 'model_loaded') or not st.session_state.model_loaded:
+        return {"RMSD_prediction": None, "confidence": "ML Model Required", "error": "ML model files not loaded"}
     
-    # Use enhanced feature-based prediction when ML model is not available
     try:
-        score = predict_binding_with_scaler(sequence)
-        confidence = "High (Enhanced Features)" if os.path.exists("scaler.pkl") else "Medium (Features Only)"
-        return {"RMSD_prediction": score, "confidence": confidence}
+        # Get the ML model components
+        model = st.session_state.model
+        tokenizer = st.session_state.tokenizer
+        scaler = st.session_state.scaler
+        
+        # Set model to evaluation mode
+        model.eval()
+        
+        # Tokenize the sequence exactly as in your notebook
+        inputs = tokenizer(
+            sequence, 
+            return_tensors="pt", 
+            padding=True, 
+            truncation=True, 
+            max_length=128
+        )
+        
+        # Make prediction with the model
+        with torch.no_grad():
+            outputs = model(**inputs)
+            scaled_prediction = outputs.logits.item()
+        
+        # Use the scaler to transform back to original scale (EXACT from notebook)
+        original_prediction = scaler.inverse_transform([[scaled_prediction]])[0][0]
+        
+        # Apply catastrophic calibration exactly as in your notebook
+        calibrated_prediction, correction, was_calibrated = catastrophic_only_calibration(
+            original_prediction, sequence
+        )
+        
+        return {
+            "RMSD_prediction": calibrated_prediction, 
+            "confidence": "High (ML Model + Scaler)",
+            "original_pred": original_prediction,
+            "calibrated": was_calibrated,
+            "correction": correction
+        }
+            
     except Exception as e:
-        st.error(f"Feature prediction error: {str(e)}")
-        return {"RMSD_prediction": -7200, "confidence": "Error"}
+        return {
+            "RMSD_prediction": None, 
+            "confidence": "Error", 
+            "error": f"Prediction failed: {str(e)}"
+        }
 
 def catastrophic_only_calibration(original_prediction, sequence):
     """Apply calibration only to sequences likely to have catastrophic errors"""
@@ -549,139 +519,159 @@ elif page == "Sequence Analyzer":
     
     st.markdown("---")
     
-    # ONLY scaler prediction button
-    if st.button("📊 Scaler Prediction", type="primary", use_container_width=True):
+    # ML model prediction button
+    if st.button("📊 ML Model + Scaler Prediction", type="primary", use_container_width=True):
         if sequence_input:
             sequence = sequence_input.strip().upper().replace('T', 'U')
             
-            # Use ML model with scaler
+            # Use ONLY ML model with scaler
             ml_result = predict_ml_score(sequence)
-            score = ml_result["RMSD_prediction"]
-            confidence = ml_result["confidence"]
-            model_type = "ML Model with Scaler Integration"
             
-            insights = generate_insights(sequence, score)
+            # Check if prediction was successful
+            if ml_result["RMSD_prediction"] is not None:
+                score = ml_result["RMSD_prediction"]
+                confidence = ml_result["confidence"]
+                model_type = "ML Model with Scaler Integration"
+                
+                insights = generate_insights(sequence, score)
+                
+                # Binding strength classification
+                if score < -7500:
+                    binding_strength = "Exceptional"
+                    strength_color = "#0D5016"
+                elif score < -7214.13:
+                    binding_strength = "Excellent" 
+                    strength_color = "#1B5E20"
+                elif score < -7000:
+                    binding_strength = "Strong"
+                    strength_color = "#2E7D32"
+                elif score < -6800:
+                    binding_strength = "Good"
+                    strength_color = "#388E3C"
+                elif score < -6600:
+                    binding_strength = "Moderate"
+                    strength_color = "#F57C00"
+                else:
+                    binding_strength = "Weak"
+                    strength_color = "#D32F2F"
+                
+                st.markdown("### 🔬 ML Model Analysis Results")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <h4>Binding Score</h4>
+                        <h2>{score:.2f}</h2>
+                        <p>Model: {model_type}</p>
+                        <p>Confidence: {confidence}</p>
+                        <p>Calibrated: {"✅ Yes" if ml_result.get("calibrated", False) else "❌ No"}</p>
+                        <p>Scaler: ✅ Active</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <h4>Binding Strength</h4>
+                        <h2 style="color:{strength_color};">{binding_strength}</h2>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    threshold = -7214.13
+                    is_good_binder = score < threshold
+                    binder_quality = "Good" if is_good_binder else "Poor"
+                    qualityColor = "#2e7d32" if is_good_binder else "#c62828"
+                    
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <h4>Binding Quality</h4>
+                        <h2 style="color:{qualityColor};">{binder_quality}</h2>
+                        <p>Multi-Pose Threshold: {threshold}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col2:
+                    features = extract_sequence_features(sequence)
+                    
+                    st.markdown("#### Sequence Features")
+                    st.markdown(f"""
+                    <div class="card">
+                        <p><strong>Length:</strong> {features['length']} nucleotides</p>
+                        <p><strong>GC Content:</strong> {features['gc_content']:.1f}%</p>
+                        <p><strong>Cytosine Content:</strong> {features['c_percent']:.1f}%</p>
+                        <p><strong>UG/GU Density:</strong> {features['ug_gu_density']:.1f}%</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Composition plot
+                    labels = ['A', 'U', 'G', 'C']
+                    sizes = [features['a_percent'], features['u_percent'], features['g_percent'], features['c_percent']]
+                    
+                    fig, ax = plt.subplots(figsize=(5, 5))
+                    colors = ['#FF9999', '#66B2FF', '#99FF99', '#FFCC99']
+                    wedges, texts, autotexts = ax.pie(sizes, labels=labels, autopct='%1.1f%%', 
+                                                     startangle=90, colors=colors)
+                    ax.set_title("Nucleotide Composition")
+                    
+                    if features['c_percent'] > 25 or features['c_percent'] < 18:
+                        wedges[3].set_edgecolor('red')
+                        wedges[3].set_linewidth(3)
+                    
+                    fig.tight_layout()
+                    st.pyplot(fig)
+                
+                # Enhanced insights
+                st.markdown("#### 🧠 Binding Insights")
+                for insight in insights:
+                    if "✅" in insight:
+                        st.markdown(f'<p class="insight-positive">{insight}</p>', unsafe_allow_html=True)
+                    else:
+                        st.markdown(f'<p class="insight-negative">{insight}</p>', unsafe_allow_html=True)
+                
+                # Show ML model details
+                if ml_result.get("calibrated", False):
+                    st.markdown("#### 🔧 Model Details")
+                    st.markdown(f"- **Original Prediction:** {ml_result.get('original_pred', 'N/A'):.2f}")
+                    st.markdown(f"- **Calibration Applied:** +{ml_result.get('correction', 0):.0f}")
+                    st.markdown(f"- **Final Score:** {score:.2f}")
+                
+                # Motif analysis
+                st.markdown("#### 🔍 Motif Analysis")
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if features['good_motifs']:
+                        st.markdown("**✅ Beneficial Motifs Found:**")
+                        for motif, count in features['good_motifs'].items():
+                            st.markdown(f"- `{motif}`: {count}x (enhances binding)")
+                    else:
+                        st.markdown("**No beneficial motifs detected**")
+                
+                with col2:
+                    if features['problem_motifs']:
+                        st.markdown("**⚠️ Problematic Motifs Found:**")
+                        for motif, count in features['problem_motifs'].items():
+                            st.markdown(f"- `{motif}`: {count}x (weakens binding)")
+                    else:
+                        st.markdown("**No problematic motifs detected**")
+                
+                # Position-specific analysis
+                if features['position_matches']:
+                    st.markdown("#### 📍 Position-Specific Effects")
+                    st.markdown("**Nucleotides at positions known to affect binding:**")
+                    for pos, nt in features['position_matches'].items():
+                        st.markdown(f"- Position {pos}: `{nt}` (associated with decreased binding)")
             
-            # Binding strength classification
-            if score < -7500:
-                binding_strength = "Exceptional"
-                strength_color = "#0D5016"
-            elif score < -7214.13:
-                binding_strength = "Excellent"
-                strength_color = "#1B5E20"
-            elif score < -7000:
-                binding_strength = "Strong"
-                strength_color = "#2E7D32"
-            elif score < -6800:
-                binding_strength = "Good"
-                strength_color = "#388E3C"
-            elif score < -6600:
-                binding_strength = "Moderate"
-                strength_color = "#F57C00"
             else:
-                binding_strength = "Weak"
-                strength_color = "#D32F2F"
-            
-            st.markdown("### 🔬 Analysis Results")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown(f"""
-                <div class="metric-card">
-                    <h4>Binding Score</h4>
-                    <h2>{score:.2f}</h2>
-                    <p>Model: {model_type}</p>
-                    <p>Confidence: {confidence}</p>
-                    <p>Scaler: {"✅ Active" if (os.path.exists("scaler.pkl") and os.path.exists("updated_model") and os.path.exists("tokenizer")) else "❌ Missing Files"}</p>
-                </div>
-                """, unsafe_allow_html=True)
+                # ML model not available
+                st.error("❌ ML Model Required")
+                st.markdown(f"**Error:** {ml_result.get('error', 'Unknown error')}")
+                st.markdown("**Required files:**")
+                st.markdown("- `updated_model/` folder with your trained model")
+                st.markdown("- `scaler.pkl` file")
+                st.markdown("- `tokenizer/` folder")
                 
-                st.markdown(f"""
-                <div class="metric-card">
-                    <h4>Binding Strength</h4>
-                    <h2 style="color:{strength_color};">{binding_strength}</h2>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                threshold = -7214.13
-                is_good_binder = score < threshold
-                binder_quality = "Good" if is_good_binder else "Poor"
-                qualityColor = "#2e7d32" if is_good_binder else "#c62828"
-                
-                st.markdown(f"""
-                <div class="metric-card">
-                    <h4>Binding Quality</h4>
-                    <h2 style="color:{qualityColor};">{binder_quality}</h2>
-                    <p>Multi-Pose Threshold: {threshold}</p>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col2:
-                features = extract_sequence_features(sequence)
-                
-                st.markdown("#### Sequence Features")
-                st.markdown(f"""
-                <div class="card">
-                    <p><strong>Length:</strong> {features['length']} nucleotides</p>
-                    <p><strong>GC Content:</strong> {features['gc_content']:.1f}%</p>
-                    <p><strong>Cytosine Content:</strong> {features['c_percent']:.1f}%</p>
-                    <p><strong>UG/GU Density:</strong> {features['ug_gu_density']:.1f}%</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Composition plot
-                labels = ['A', 'U', 'G', 'C']
-                sizes = [features['a_percent'], features['u_percent'], features['g_percent'], features['c_percent']]
-                
-                fig, ax = plt.subplots(figsize=(5, 5))
-                colors = ['#FF9999', '#66B2FF', '#99FF99', '#FFCC99']
-                wedges, texts, autotexts = ax.pie(sizes, labels=labels, autopct='%1.1f%%', 
-                                                 startangle=90, colors=colors)
-                ax.set_title("Nucleotide Composition")
-                
-                if features['c_percent'] > 25 or features['c_percent'] < 18:
-                    wedges[3].set_edgecolor('red')
-                    wedges[3].set_linewidth(3)
-                
-                fig.tight_layout()
-                st.pyplot(fig)
-            
-            # Enhanced insights
-            st.markdown("#### 🧠 Binding Insights")
-            for insight in insights:
-                if "✅" in insight:
-                    st.markdown(f'<p class="insight-positive">{insight}</p>', unsafe_allow_html=True)
-                else:
-                    st.markdown(f'<p class="insight-negative">{insight}</p>', unsafe_allow_html=True)
-            
-            # Motif analysis
-            st.markdown("#### 🔍 Motif Analysis")
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                if features['good_motifs']:
-                    st.markdown("**✅ Beneficial Motifs Found:**")
-                    for motif, count in features['good_motifs'].items():
-                        st.markdown(f"- `{motif}`: {count}x (enhances binding)")
-                else:
-                    st.markdown("**No beneficial motifs detected**")
-            
-            with col2:
-                if features['problem_motifs']:
-                    st.markdown("**⚠️ Problematic Motifs Found:**")
-                    for motif, count in features['problem_motifs'].items():
-                        st.markdown(f"- `{motif}`: {count}x (weakens binding)")
-                else:
-                    st.markdown("**No problematic motifs detected**")
-            
-            # Position-specific analysis
-            if features['position_matches']:
-                st.markdown("#### 📍 Position-Specific Effects")
-                st.markdown("**Nucleotides at positions known to affect binding:**")
-                for pos, nt in features['position_matches'].items():
-                    st.markdown(f"- Position {pos}: `{nt}` (associated with decreased binding)")
-
         else:
             st.warning("Please enter an RNA sequence.")
 
