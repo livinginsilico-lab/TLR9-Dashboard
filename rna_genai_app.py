@@ -712,44 +712,63 @@ elif page == "GenAI Generation Tool":
                     scored_sequences.sort(key=lambda x: x[1])
                     generated_sequences = [seq for seq, score in scored_sequences[:num_samples]]
                 
-                # Calculate predictions for both traditional and GenAI ML
-                predictions = []
-                ml_predictions = []
+                # Generate sequences using GenAI techniques
+                generated_sequences = sampling(
+                    num_samples=num_samples,
+                    start=start_sequence if start_sequence else "<|endoftext|>",
+                    max_new_tokens=max_new_tokens,
+                    strategy=strategy,
+                    temperature=temperature,
+                    optimization_level=optimization_level
+                )
                 
-                for seq in generated_sequences:
-                    score = predict_binding(seq)
-                    predictions.append(score)
+                # If binding-optimized, generate more and select best using traditional scoring only
+                if optimization_level == "Binding-Optimized":
+                    extended_sequences = sampling(
+                        num_samples=num_samples * 2,
+                        start=start_sequence if start_sequence else "<|endoftext|>",
+                        max_new_tokens=max_new_tokens,
+                        strategy=strategy,
+                        temperature=max(0.5, temperature - 0.2),
+                        optimization_level=optimization_level
+                    )
                     
-                    # Get GenAI ML prediction
-                    ml_result = predict_ml_score(seq)
-                    ml_predictions.append(ml_result["RMSD_prediction"])
+                    # Score and select best using only traditional method
+                    scored_sequences = []
+                    for seq in extended_sequences:
+                        score = predict_binding(seq)
+                        scored_sequences.append((seq, score))
+                    
+                    # Sort by score (lower is better) and take top num_samples
+                    scored_sequences.sort(key=lambda x: x[1])
+                    generated_sequences = [seq for seq, score in scored_sequences[:num_samples]]
                 
+                # Simple dataframe with just sequences and basic info
                 st.session_state.generated_data = pd.DataFrame({
                     "Generated Sequence": generated_sequences,
-                    "Traditional Score": predictions,
-                    "GenAI Score": ml_predictions,
-                    "Sequence Length": [len(seq) for seq in generated_sequences]
+                    "Sequence Length": [len(seq) for seq in generated_sequences],
+                    "GC Content": [extract_sequence_features(seq)['gc_content'] for seq in generated_sequences],
+                    "C Content": [extract_sequence_features(seq)['c_percent'] for seq in generated_sequences]
                 })
         
         if st.session_state.generated_data is not None:
             df_gen = st.session_state.generated_data
             
-            # Add quality classification
-            def get_quality(trad_score, genai_score):
-                avg_score = (trad_score + genai_score) / 2
-                if avg_score < -7500:
+            # Add quality classification based on sequence features only
+            def get_quality_from_features(gc_content, c_content):
+                if c_content > 30 and gc_content > 55:
                     return "Exceptional"
-                elif avg_score < -7214.13:
+                elif c_content > 25 and gc_content > 50:
                     return "Excellent"
-                elif avg_score < -7000:
+                elif c_content > 20 and gc_content > 45:
                     return "Strong"
-                elif avg_score < -6800:
+                elif c_content > 15:
                     return "Good"
                 else:
                     return "Moderate"
                 
             df_gen["Quality"] = df_gen.apply(
-                lambda row: get_quality(row["Traditional Score"], row["GenAI Score"]), 
+                lambda row: get_quality_from_features(row["GC Content"], row["C Content"]), 
                 axis=1
             )
             
@@ -765,9 +784,9 @@ elif page == "GenAI Generation Tool":
                 return colors.get(val, '')
             
             styled_df = df_gen.style.format({
-                "Traditional Score": "{:.2f}",
-                "GenAI Score": "{:.2f}",
-                "Sequence Length": "{:.0f}"
+                "Sequence Length": "{:.0f}",
+                "GC Content": "{:.1f}%",
+                "C Content": "{:.1f}%"
             }).applymap(highlight_quality, subset=["Quality"])
             
             st.dataframe(styled_df, use_container_width=True)
@@ -778,12 +797,25 @@ elif page == "GenAI Generation Tool":
                 selected_idx = st.selectbox(
                     "Select sequence for detailed analysis:",
                     options=range(len(df_gen)),
-                    format_func=lambda x: f"Seq {x+1}: {df_gen['Quality'].iloc[x]} (T:{df_gen['Traditional Score'].iloc[x]:.1f} | GenAI:{df_gen['GenAI Score'].iloc[x]:.1f})"
+                    format_func=lambda x: f"Seq {x+1}: {df_gen['Quality'].iloc[x]} (Length: {df_gen['Sequence Length'].iloc[x]})"
                 )
                 
                 selected_seq = df_gen["Generated Sequence"].iloc[selected_idx]
                 features = extract_sequence_features(selected_seq)
-                insights = generate_insights(selected_seq, df_gen["Traditional Score"].iloc[selected_idx])
+                
+                # Generate insights without binding scores
+                insights = []
+                if features['c_percent'] > 25:
+                    insights.append(f"High cytosine content ({features['c_percent']:.1f}%) - favorable for binding")
+                if features['gc_content'] > 50:
+                    insights.append(f"High GC content ({features['gc_content']:.1f}%) - good structural stability")
+                if features['good_motifs']:
+                    for motif, count in list(features['good_motifs'].items())[:2]:
+                        insights.append(f"Contains beneficial motif '{motif}' ({count}x)")
+                if features['ug_gu_density'] < 8:
+                    insights.append(f"Low UG/GU density ({features['ug_gu_density']:.1f}%) - favorable")
+                elif features['ug_gu_density'] > 12:
+                    insights.append(f"High UG/GU density ({features['ug_gu_density']:.1f}%) - may reduce binding")
                 
                 # Feature metrics
                 col1, col2, col3, col4 = st.columns(4)
@@ -797,9 +829,9 @@ elif page == "GenAI Generation Tool":
                     st.metric("UG/GU Density", f"{features['ug_gu_density']:.1f}%")
                 
                 # Insights
-                st.markdown("**Binding Analysis:**")
+                st.markdown("**Sequence Analysis:**")
                 for insight in insights[:5]:
-                    if "✅" in insight:
+                    if "favorable" in insight or "High cytosine" in insight or "High GC" in insight or "beneficial" in insight or "Low UG/GU" in insight:
                         st.markdown(f'<p style="color: #2e7d32;">• {insight}</p>', unsafe_allow_html=True)
                     else:
                         st.markdown(f'<p style="color: #c62828;">• {insight}</p>', unsafe_allow_html=True)
@@ -809,7 +841,7 @@ elif page == "GenAI Generation Tool":
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    fasta_content = f">Generated_Sequence_{selected_idx+1}|Quality_{df_gen['Quality'].iloc[selected_idx]}|TradScore_{df_gen['Traditional Score'].iloc[selected_idx]:.2f}|GenAIScore_{df_gen['GenAI Score'].iloc[selected_idx]:.2f}\n{selected_seq}"
+                    fasta_content = f">Generated_Sequence_{selected_idx+1}|Quality_{df_gen['Quality'].iloc[selected_idx]}|Length_{df_gen['Sequence Length'].iloc[selected_idx]}|GC_{df_gen['GC Content'].iloc[selected_idx]:.1f}|C_{df_gen['C Content'].iloc[selected_idx]:.1f}\n{selected_seq}"
                     st.download_button(
                         label="📄 Download FASTA",
                         data=fasta_content,
@@ -832,18 +864,16 @@ elif page == "GenAI Generation Tool":
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
-                    avg_score = (df_gen["Traditional Score"].mean() + df_gen["GenAI Score"].mean()) / 2
-                    st.metric("Average Score", f"{avg_score:.2f}")
+                    avg_length = df_gen["Sequence Length"].mean()
+                    st.metric("Average Length", f"{avg_length:.0f} nt")
                 
                 with col2:
-                    good_binders = len(df_gen[(df_gen["Traditional Score"] < -7214.13) | (df_gen["GenAI Score"] < -7214.13)])
-                    st.metric("Good Binders", f"{good_binders}/{len(df_gen)}")
+                    avg_gc = df_gen["GC Content"].mean()
+                    st.metric("Average GC Content", f"{avg_gc:.1f}%")
                 
                 with col3:
-                    best_trad = df_gen["Traditional Score"].min()
-                    best_genai = df_gen["GenAI Score"].min()
-                    best_overall = min(best_trad, best_genai)
-                    st.metric("Best Score", f"{best_overall:.2f}")
+                    avg_c = df_gen["C Content"].mean()
+                    st.metric("Average C Content", f"{avg_c:.1f}%")
                     
         else:
             st.info("📝 Configure your generation parameters above and click 'Generate Sequences' to create novel RNA sequences using advanced GenAI techniques.")
@@ -852,8 +882,9 @@ elif page == "GenAI Generation Tool":
             st.markdown("#### 🌟 Example Generated Sequences")
             example_data = {
                 "Example": ["High-Quality", "Balanced", "Creative"],
-                "Traditional Score": [-7350.2, -7180.5, -6950.8],
-                "GenAI Score": [-7385.1, -7165.3, -6975.2],
+                "Length": [210, 195, 205],
+                "GC Content": [55.2, 48.7, 52.1],
+                "C Content": [28.1, 22.5, 25.4],
                 "Quality": ["Excellent", "Strong", "Good"]
             }
             example_df = pd.DataFrame(example_data)
