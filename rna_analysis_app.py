@@ -174,33 +174,48 @@ def generate_explanations(sequence, features):
 
 # Setup ML model and tokenizer (EXACT from your notebook)
 def setup_model_components():
-    """Setup the EXACT model and tokenizer from your notebook - ML MODEL ONLY"""
+    """Setup ML model from Hugging Face + local files"""
     if 'model_components_loaded' not in st.session_state:
         st.session_state.model_components_loaded = True
         st.session_state.model_loaded = False
         
         try:
-            # Check for required files
-            model_path = "updated_model"
+            # Check for required local files
+            model_config_path = "updated_model/config.json"
             scaler_path = "scaler.pkl"
             tokenizer_path = "tokenizer"
             
-            # All files must exist for ML model to work
-            if os.path.exists(model_path) and os.path.exists(scaler_path) and os.path.exists(tokenizer_path):
+            # Check if local config and scaler exist
+            if os.path.exists(model_config_path) and os.path.exists(scaler_path) and os.path.exists(tokenizer_path):
                 from transformers import AutoTokenizer, GPT2ForSequenceClassification
                 import warnings
                 warnings.filterwarnings("ignore")
                 
-                st.info("🔄 Loading ML model and scaler...")
+                st.info("🔄 Loading ML model from Hugging Face + local files...")
                 
-                # Load model from your updated_model folder
-                st.session_state.model = GPT2ForSequenceClassification.from_pretrained(
-                    model_path,
-                    local_files_only=True,
-                    trust_remote_code=False
-                )
+                try:
+                    # Load model from Hugging Face (SafeTensors) + local config
+                    st.session_state.model = GPT2ForSequenceClassification.from_pretrained(
+                        "HammadQ123/genai-safetensors-model",
+                        config="updated_model/config.json",  # Use local config
+                        use_safetensors=True,
+                        trust_remote_code=False
+                    )
+                    st.success("✅ Model loaded from Hugging Face SafeTensors!")
+                    
+                except Exception as hf_error:
+                    st.warning(f"⚠️ Hugging Face loading failed: {hf_error}")
+                    st.info("🔄 Trying local model files...")
+                    
+                    # Fallback to local files if Hugging Face fails
+                    st.session_state.model = GPT2ForSequenceClassification.from_pretrained(
+                        "updated_model",
+                        local_files_only=True,
+                        trust_remote_code=False
+                    )
+                    st.success("✅ Model loaded from local files!")
                 
-                # Load tokenizer
+                # Load tokenizer from local files
                 st.session_state.tokenizer = AutoTokenizer.from_pretrained(
                     tokenizer_path,
                     local_files_only=True
@@ -212,35 +227,39 @@ def setup_model_components():
                 
                 st.session_state.model_type = "ml_with_scaler"
                 st.session_state.model_loaded = True
-                st.success("✅ ML model with scaler loaded successfully!")
+                st.success("✅ Complete ML pipeline loaded successfully!")
                 
             else:
                 missing_files = []
-                if not os.path.exists(model_path):
-                    missing_files.append("updated_model")
+                if not os.path.exists(model_config_path):
+                    missing_files.append("updated_model/config.json")
                 if not os.path.exists(scaler_path):
                     missing_files.append("scaler.pkl")
                 if not os.path.exists(tokenizer_path):
-                    missing_files.append("tokenizer")
+                    missing_files.append("tokenizer/")
                 
                 st.session_state.model_type = "no_model"
                 st.session_state.model_loaded = False
-                st.error(f"❌ ML Model requires: {', '.join(missing_files)}")
-                st.warning("⚠️ Upload all required files to use ML predictions")
+                st.error(f"❌ Missing local files: {', '.join(missing_files)}")
+                st.info("📁 Note: model.safetensors loads from Hugging Face: HammadQ123/genai-safetensors-model")
                 
         except Exception as e:
             st.session_state.model_loaded = False
             st.error(f"❌ Error loading ML model: {str(e)}")
-            st.info("📁 Ensure your updated_model folder contains: config.json, pytorch_model.bin or model.safetensors")
+            st.info("🔧 Setup: Local config.json + tokenizer/ + scaler.pkl + HF SafeTensors")
 
 # ML model prediction ONLY - no fallback
 def predict_ml_score(sequence):
-    """ML model prediction ONLY - uses your trained model with scaler from Kaggle"""
+    """ML model prediction ONLY - uses your trained model from HF + local files"""
     setup_model_components()
     
     # Only proceed if ML model is loaded
     if not hasattr(st.session_state, 'model_loaded') or not st.session_state.model_loaded:
-        return {"RMSD_prediction": None, "confidence": "ML Model Required", "error": "ML model files not loaded"}
+        return {
+            "RMSD_prediction": None, 
+            "confidence": "ML Model Required", 
+            "error": "ML model pipeline not loaded. Need: config.json, tokenizer/, scaler.pkl (local) + model.safetensors (HF)"
+        }
     
     try:
         # Get the ML model components
@@ -275,10 +294,11 @@ def predict_ml_score(sequence):
         
         return {
             "RMSD_prediction": calibrated_prediction, 
-            "confidence": "High (ML Model + Scaler)",
+            "confidence": "High (HF SafeTensors + Local)",
             "original_pred": original_prediction,
             "calibrated": was_calibrated,
-            "correction": correction
+            "correction": correction,
+            "model_source": "HuggingFace SafeTensors"
         }
             
     except Exception as e:
@@ -460,26 +480,36 @@ if page == "Home":
         </div>
         """, unsafe_allow_html=True)
         
-        if os.path.exists("updated_model") and os.path.exists("scaler.pkl") and os.path.exists("tokenizer"):
-            st.success("🚀 ML Model with Scaler Active")
-            st.markdown("- ✅ updated_model folder detected")
-            st.markdown("- ✅ scaler.pkl detected")
-            st.markdown("- ✅ tokenizer folder detected")
-            st.markdown("- Uses ML model + scaler pipeline")
+        # Check for the hybrid setup: HF SafeTensors + local files
+        has_local_config = os.path.exists("updated_model/config.json")
+        has_scaler = os.path.exists("scaler.pkl")
+        has_tokenizer = os.path.exists("tokenizer")
+        
+        if has_local_config and has_scaler and has_tokenizer:
+            st.success("🚀 Hybrid ML Model Active")
+            st.markdown("- ✅ model.safetensors (Hugging Face)")
+            st.markdown("- ✅ config.json (Local)")
+            st.markdown("- ✅ scaler.pkl (Local)")
+            st.markdown("- ✅ tokenizer/ (Local)")
+            st.markdown("- **Model:** HammadQ123/genai-safetensors-model")
+            st.markdown("- **Setup:** HF SafeTensors + Local config")
         else:
             missing_components = []
-            if not os.path.exists("updated_model"):
-                missing_components.append("updated_model folder")
-            if not os.path.exists("scaler.pkl"):
+            if not has_local_config:
+                missing_components.append("updated_model/config.json")
+            if not has_scaler:
                 missing_components.append("scaler.pkl")
-            if not os.path.exists("tokenizer"):
-                missing_components.append("tokenizer folder")
+            if not has_tokenizer:
+                missing_components.append("tokenizer/ folder")
             
             if missing_components:
-                st.warning("⚠️ Enhanced Feature Mode")
-                st.markdown(f"- Missing: {', '.join(missing_components)}")
-                st.markdown("- Using enhanced feature-based predictions")
-                st.markdown("- Upload ML model files for full functionality")
+                st.warning("⚠️ Hybrid Setup Required")
+                st.markdown("**Missing local files:**")
+                for comp in missing_components:
+                    st.markdown(f"- ❌ {comp}")
+                st.markdown("**Available:**")
+                st.markdown("- ✅ model.safetensors (HammadQ123/genai-safetensors-model)")
+                st.markdown("**Note:** Upload missing local files to enable ML predictions")
             else:
                 st.error("❌ Configuration Error")
         
@@ -566,6 +596,7 @@ elif page == "Sequence Analyzer":
                         <h2>{score:.2f}</h2>
                         <p>Model: {model_type}</p>
                         <p>Confidence: {confidence}</p>
+                        <p>Source: {ml_result.get("model_source", "Hybrid Setup")}</p>
                         <p>Calibrated: {"✅ Yes" if ml_result.get("calibrated", False) else "❌ No"}</p>
                         <p>Scaler: ✅ Active</p>
                     </div>
