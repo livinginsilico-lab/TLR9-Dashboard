@@ -461,11 +461,8 @@ elif page == "Sequence Analyzer":
     
     st.markdown("---")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        scaler_analyze_button = st.button("📊 Scaler Prediction", type="primary", use_container_width=True)
-    with col2:
-        pass  # Remove other buttons
+    # ONLY scaler prediction button
+    scaler_analyze_button = st.button("📊 Scaler Prediction", type="primary", use_container_width=True)
     
     if scaler_analyze_button:
         if sequence_input:
