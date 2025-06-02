@@ -374,7 +374,7 @@ def generate_insights(sequence, score):
     
     return insights
 
-def sampling(num_samples, start, max_new_tokens=256, strategy="top_k", temperature=1.0, optimization_level="Balanced"):
+def sampling(num_samples, start, max_new_tokens=256, strategy="top_k", temperature=1.0):
     """Generate RNA sequences using GenAI-inspired approach"""
     result = []
     nucleotides = ['A', 'G', 'C', 'U']
@@ -389,27 +389,10 @@ def sampling(num_samples, start, max_new_tokens=256, strategy="top_k", temperatu
         seq = prefix
         
         for j in range(length - len(prefix)):
-            # Inject beneficial motifs based on optimization level
-            if optimization_level == "Binding-Optimized" and j > 10 and j % 8 == 0 and random.random() < 0.4:
-                beneficial_motifs = ['AAGAGA', 'AGCCUG', 'GUGAAG', 'AGAAAG']
-                motif = random.choice(beneficial_motifs)
-                seq += motif
-                j += len(motif) - 1
-                continue
-            elif optimization_level == "Balanced" and j > 15 and j % 12 == 0 and random.random() < 0.25:
-                beneficial_motifs = ['AAGAGA', 'AGCCUG']
-                motif = random.choice(beneficial_motifs)
-                seq += motif
-                j += len(motif) - 1
-                continue
-            
             # Nucleotide selection based on strategy and temperature
             if strategy == "greedy_search":
                 # Favor C and G for better binding
                 weights = [0.2, 0.3, 0.35, 0.15]  # A, G, C, U
-            elif optimization_level == "Binding-Optimized":
-                # Heavily favor C content
-                weights = [0.2, 0.25, 0.4, 0.15]  # A, G, C, U
             else:
                 # More balanced approach
                 if random.random() < temperature:
@@ -530,12 +513,6 @@ elif page == "GenAI Generation Tool":
             help="Number of sequences to generate"
         )
         
-        optimization_level = st.radio(
-            "Optimization Focus", 
-            ["Creative", "Balanced", "Binding-Optimized"],
-            help="Level of optimization for binding affinity"
-        )
-        
         col_settings1, col_settings2 = st.columns(2)
         with col_settings1:
             temperature = st.slider(
@@ -557,213 +534,37 @@ elif page == "GenAI Generation Tool":
             help="Optional prefix for generated sequences"
         )
         
-        col_gen1, col_gen2 = st.columns(2)
-        with col_gen1:
-            generate_button = st.button("🧪 Generate Sequences", type="primary", use_container_width=True)
-        with col_gen2:
-            optimize_button = st.button("🎯 Optimize for Binding", type="secondary", use_container_width=True)
+        generate_button = st.button("🧪 Generate Sequences", type="primary", use_container_width=True)
         
-        # Quick analysis section
-        st.markdown("### 🔬 Quick Analysis")
-        predict_sequence = st.text_area(
-            "Enter RNA Sequence for Analysis", 
-            height=80,
-            placeholder="GAAGAGAUAAUCUGAAACAACA..."
-        )
-        
-        col_pred1, col_pred2 = st.columns(2)
-        with col_pred1:
-            predict_button = st.button("🔬 Traditional Analysis", use_container_width=True)
-        with col_pred2:
-            ml_predict_button = st.button("🤖 GenAI Prediction", use_container_width=True)
-        
-        if predict_button or ml_predict_button:
-            if predict_sequence:
-                clean_sequence = predict_sequence.strip().upper().replace('T', 'U')
-                
-                if ml_predict_button:
-                    ml_result = predict_ml_score(clean_sequence)
-                    score = ml_result["RMSD_prediction"]
-                    confidence = ml_result["confidence"]
-                    model_used = "GenAI GPT Model"
-                else:
-                    score = predict_binding(clean_sequence)
-                    confidence = "High"
-                    model_used = "Traditional"
-                
-                # Quality assessment
-                if score < -7500:
-                    quality = "Exceptional Binder"
-                    color = "#0D5016"
-                elif score < -7214.13:
-                    quality = "Excellent Binder"
-                    color = "#1B5E20"
-                elif score < -7000:
-                    quality = "Good Binder"
-                    color = "#2E7D32"
-                else:
-                    quality = "Average Binder"
-                    color = "#F57C00"
-                
-                if score < -7214.13:
-                    quality = "Excellent Binder"
-                    color = "#1B5E20"
-                elif score < -7000:
-                    quality = "Good Binder"
-                    color = "#2E7D32"
-                else:
-                    quality = "Poor Binder"
-                    color = "#D32F2F"
-                
-                st.markdown(f"""
-                <div style="padding: 15px; border-radius: 5px; background-color: #f0f7ff; margin-top: 10px;">
-                    <h4>Prediction Result</h4>
-                    <h2 style="color: {color};">{score:.2f}</h2>
-                    <p><strong>Quality:</strong> {quality}</p>
-                    <p><strong>Model:</strong> {model_used}</p>
-                    <p><strong>Confidence:</strong> {confidence}</p>
-                    <p><strong>Multi-Pose Threshold:</strong> -7214.13</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Generate insights
-                insights = generate_insights(clean_sequence, score)
-                st.markdown("**Key Insights:**")
-                for insight in insights[:3]:
-                    st.markdown(f"• {insight}")
-            else:
-                st.warning("Please enter a sequence")
-    
     with col2:
         st.markdown("### 🧬 Generated Sequences")
         
         if 'generated_data' not in st.session_state:
             st.session_state.generated_data = None
             
-        if generate_button or optimize_button:
+        if generate_button:
             with st.spinner("🔄 Generating sequences using GenAI techniques..."):
-                if optimize_button:
-                    optimization_level = "Binding-Optimized"
-                
                 # Generate sequences
                 generated_sequences = sampling(
                     num_samples=num_samples,
                     start=start_sequence if start_sequence else "<|endoftext|>",
                     max_new_tokens=max_new_tokens,
                     strategy=strategy,
-                    temperature=temperature,
-                    optimization_level=optimization_level
+                    temperature=temperature
                 )
-                
-                # If binding-optimized, generate more and select best
-                if optimization_level == "Binding-Optimized":
-                    extended_sequences = sampling(
-                        num_samples=num_samples * 2,
-                        start=start_sequence if start_sequence else "<|endoftext|>",
-                        max_new_tokens=max_new_tokens,
-                        strategy=strategy,
-                        temperature=max(0.5, temperature - 0.2),
-                        optimization_level=optimization_level
-                    )
-                    
-                    # Score and select best
-                    scored_sequences = []
-                    for seq in extended_sequences:
-                        score = predict_binding(seq)
-                        scored_sequences.append((seq, score))
-                    
-                    # Sort by score (lower is better) and take top num_samples
-                    scored_sequences.sort(key=lambda x: x[1])
-                    generated_sequences = [seq for seq, score in scored_sequences[:num_samples]]
-                
-                # Generate sequences using GenAI techniques
-                generated_sequences = sampling(
-                    num_samples=num_samples,
-                    start=start_sequence if start_sequence else "<|endoftext|>",
-                    max_new_tokens=max_new_tokens,
-                    strategy=strategy,
-                    temperature=temperature,
-                    optimization_level=optimization_level
-                )
-                
-                # If binding-optimized, generate more and select best using traditional scoring only
-                if optimization_level == "Binding-Optimized":
-                    extended_sequences = sampling(
-                        num_samples=num_samples * 2,
-                        start=start_sequence if start_sequence else "<|endoftext|>",
-                        max_new_tokens=max_new_tokens,
-                        strategy=strategy,
-                        temperature=max(0.5, temperature - 0.2),
-                        optimization_level=optimization_level
-                    )
-                    
-                    # Score and select best using only traditional method
-                    scored_sequences = []
-                    for seq in extended_sequences:
-                        score = predict_binding(seq)
-                        scored_sequences.append((seq, score))
-                    
-                    # Sort by score (lower is better) and take top num_samples
-                    scored_sequences.sort(key=lambda x: x[1])
-                    generated_sequences = [seq for seq, score in scored_sequences[:num_samples]]
-                
-                # Calculate predictions for both traditional and GenAI ML
-                predictions = []
-                ml_predictions = []
-                
-                for seq in generated_sequences:
-                    score = predict_binding(seq)
-                    predictions.append(score)
-                    
-                    # Get GenAI ML prediction
-                    ml_result = predict_ml_score(seq)
-                    ml_predictions.append(ml_result["RMSD_prediction"])
                 
                 st.session_state.generated_data = pd.DataFrame({
                     "Generated Sequence": generated_sequences,
-                    "Traditional Score": predictions,
-                    "GenAI Score": ml_predictions,
                     "Sequence Length": [len(seq) for seq in generated_sequences]
                 })
         
         if st.session_state.generated_data is not None:
             df_gen = st.session_state.generated_data
             
-            # Add quality classification based on both scores
-            def get_quality(trad_score, genai_score):
-                avg_score = (trad_score + genai_score) / 2
-                if avg_score < -7500:
-                    return "Exceptional"
-                elif avg_score < -7214.13:
-                    return "Excellent"
-                elif avg_score < -7000:
-                    return "Strong"
-                elif avg_score < -6800:
-                    return "Good"
-                else:
-                    return "Moderate"
-                
-            df_gen["Quality"] = df_gen.apply(
-                lambda row: get_quality(row["Traditional Score"], row["GenAI Score"]), 
-                axis=1
-            )
-            
             # Style the dataframe
-            def highlight_quality(val):
-                colors = {
-                    "Exceptional": 'background-color: #A5D6A7; color: #0D5016',
-                    "Excellent": 'background-color: #C8E6C9; color: #1B5E20',
-                    "Strong": 'background-color: #DCEDC8; color: #2E7D32', 
-                    "Good": 'background-color: #E8F5E8; color: #388E3C',
-                    "Moderate": 'background-color: #FFF3E0; color: #F57C00'
-                }
-                return colors.get(val, '')
-            
             styled_df = df_gen.style.format({
-                "Traditional Score": "{:.2f}",
-                "GenAI Score": "{:.2f}",
                 "Sequence Length": "{:.0f}"
-            }).map(highlight_quality, subset=["Quality"])
+            })
             
             st.dataframe(styled_df, use_container_width=True)
             
@@ -773,7 +574,7 @@ elif page == "GenAI Generation Tool":
                 selected_idx = st.selectbox(
                     "Select sequence for detailed analysis:",
                     options=range(len(df_gen)),
-                    format_func=lambda x: f"Seq {x+1}: {df_gen['Quality'].iloc[x]} (Length: {df_gen['Sequence Length'].iloc[x]})"
+                    format_func=lambda x: f"Seq {x+1}: (Length: {df_gen['Sequence Length'].iloc[x]})"
                 )
                 
                 selected_seq = df_gen["Generated Sequence"].iloc[selected_idx]
@@ -812,12 +613,11 @@ elif page == "GenAI Generation Tool":
                     else:
                         st.markdown(f'<p style="color: #c62828;">• {insight}</p>', unsafe_allow_html=True)
                 
-                # Export options
-                st.markdown("### 📁 Export Options")
+                # Download buttons without "Export Options" text
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    fasta_content = f">Generated_Sequence_{selected_idx+1}|Quality_{df_gen['Quality'].iloc[selected_idx]}|Length_{df_gen['Sequence Length'].iloc[selected_idx]}|GC_{df_gen['GC Content'].iloc[selected_idx]:.1f}|C_{df_gen['C Content'].iloc[selected_idx]:.1f}\n{selected_seq}"
+                    fasta_content = f">Generated_Sequence_{selected_idx+1}|Length_{df_gen['Sequence Length'].iloc[selected_idx]}|GC_{features['gc_content']:.1f}|C_{features['c_percent']:.1f}\n{selected_seq}"
                     st.download_button(
                         label="📄 Download FASTA",
                         data=fasta_content,
@@ -844,11 +644,13 @@ elif page == "GenAI Generation Tool":
                     st.metric("Average Length", f"{avg_length:.0f} nt")
                 
                 with col2:
-                    avg_gc = df_gen["GC Content"].mean()
+                    # Calculate average GC content from all sequences
+                    avg_gc = np.mean([extract_sequence_features(seq)['gc_content'] for seq in df_gen["Generated Sequence"]])
                     st.metric("Average GC Content", f"{avg_gc:.1f}%")
                 
                 with col3:
-                    avg_c = df_gen["C Content"].mean()
+                    # Calculate average C content from all sequences
+                    avg_c = np.mean([extract_sequence_features(seq)['c_percent'] for seq in df_gen["Generated Sequence"]])
                     st.metric("Average C Content", f"{avg_c:.1f}%")
                     
         else:
@@ -860,8 +662,7 @@ elif page == "GenAI Generation Tool":
                 "Example": ["High-Quality", "Balanced", "Creative"],
                 "Length": [210, 195, 205],
                 "GC Content": [55.2, 48.7, 52.1],
-                "C Content": [28.1, 22.5, 25.4],
-                "Quality": ["Excellent", "Strong", "Good"]
+                "C Content": [28.1, 22.5, 25.4]
             }
             example_df = pd.DataFrame(example_data)
             st.dataframe(example_df, use_container_width=True)
