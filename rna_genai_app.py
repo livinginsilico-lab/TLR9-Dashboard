@@ -543,6 +543,8 @@ elif page == "GenAI Generation Tool":
             st.session_state.generated_data = None
             
         if generate_button:
+            # Clear any previous data to ensure clean state
+            st.session_state.generated_data = None
             with st.spinner("🔄 Generating sequences using GenAI techniques..."):
                 # Generate sequences
                 generated_sequences = sampling(
