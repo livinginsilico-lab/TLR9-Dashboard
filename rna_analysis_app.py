@@ -170,8 +170,6 @@ def generate_explanations(sequence, features):
     
     return explanations
 
-
-
 # Setup ML model and tokenizer (EXACT from your notebook)
 def setup_model_components():
     """Setup ML model from Hugging Face + local files"""
@@ -818,75 +816,6 @@ elif page == "Dataset Insights":
         
         fig.tight_layout()
         st.pyplot(fig)
-        
-    with tab3:
-        st.markdown("### Model Performance")
-        
-        st.markdown("""
-        <div class="card">
-            <h4>📊 Comprehensive Multi-Pose Analysis with Scaler Integration</h4>
-            <ul>
-                <li><strong>Dataset:</strong> 1,232 sequences with multi-pose analysis</li>
-                <li><strong>Methodology:</strong> Top 5 binding conformations per sequence</li>
-                <li><strong>ANOVA F-statistic:</strong> 8.8565</li>
-                <li><strong>Statistical significance:</strong> p < 0.0001</li>
-                <li><strong>Elite performers (top 25%):</strong> 308 sequences</li>
-                <li><strong>Multi-pose threshold:</strong> -7214.13</li>
-                <li><strong>Good+ binders identified:</strong> 304 (24.7%)</li>
-                <li><strong>Threshold methodology:</strong> Mean of top-3 scores from elite performers</li>
-                <li><strong>Scaler integration:</strong> Enhanced ML-like transformations</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown("#### Multi-Pose Analysis Performance Comparison")
-        model_comparison = {
-            'Analysis Type': ['Single Best Score', 'Mean of Top 5', 'Multi-Pose Elite', 'Feature-based', 'With Scaler', 'ML Model'],
-            'Threshold': [-6800, -7000, -7214.13, -7214.13, -7214.13, -7214.13],
-            'Accuracy': [68, 74, 89, 92, 95, 97],
-            'Precision': [65, 71, 86, 89, 93, 96]
-        }
-        
-        comp_df = pd.DataFrame(model_comparison)
-        
-        fig, ax = plt.subplots(figsize=(12, 8))
-        x = np.arange(len(comp_df))
-        width = 0.35
-        
-        ax.bar(x - width/2, comp_df['Accuracy'], width, label='Accuracy', alpha=0.8, color='#2E7D32')
-        ax.bar(x + width/2, comp_df['Precision'], width, label='Precision', alpha=0.8, color='#1976D2')
-        
-        ax.set_ylabel('Performance (%)')
-        ax.set_title('Multi-Pose Analysis Performance Comparison (Feature + Scaler + ML)')
-        ax.set_xticks(x)
-        ax.set_xticklabels(comp_df['Analysis Type'], rotation=45, ha='right')
-        ax.legend()
-        ax.set_ylim(60, 100)
-        
-        # Add threshold values as text
-        for i, threshold in enumerate(comp_df['Threshold']):
-            ax.text(i, 98, f'T: {threshold}', ha='center', fontsize=8, color='red')
-        
-        fig.tight_layout()
-        st.pyplot(fig)
-        
-        # Implementation guide
-        st.markdown("### Implementation Status")
-        st.markdown("""
-        <div class="card">
-            <h4>🚀 Current Implementation Status</h4>
-            <ul>
-                <li><strong>Dataset:</strong> ✅ 1,232 sequences with multi-pose analysis</li>
-                <li><strong>Scaler:</strong> ✅ Available and integrated (scaler.pkl detection)</li>
-                <li><strong>Feature Model:</strong> ✅ Enhanced feature-based predictions</li>
-                <li><strong>ML Model:</strong> 🔄 Ready when updated_model.pt is added</li>
-                <li><strong>Threshold:</strong> ✅ Updated to -7214.13 (multi-pose validated)</li>
-                <li><strong>Statistical rigor:</strong> ✅ Three-step validation methodology</li>
-                <li><strong>Prediction modes:</strong> ✅ Feature-based, Scaler-enhanced, and ML integration</li>
-                <li><strong>GenAI functionality:</strong> ❌ Completely removed (as requested)</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
 
 # Footer
 st.markdown("""
