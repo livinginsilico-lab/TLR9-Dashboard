@@ -385,9 +385,11 @@ def sampling(num_samples, start, max_new_tokens=256, strategy="top_k", temperatu
         prefix = ""
     
     for i in range(int(num_samples)):
-        length = random.randint(180, 220)
+        # Use exact length specified by max_new_tokens
+        length = max_new_tokens
         seq = prefix
         
+        # Generate exactly the specified length minus prefix length
         for j in range(length - len(prefix)):
             # Nucleotide selection based on strategy and temperature
             if strategy == "greedy_search":
@@ -523,8 +525,8 @@ elif page == "GenAI Generation Tool":
         with col_settings2:
             max_new_tokens = st.slider(
                 "Sequence Length", 
-                min_value=50, max_value=300, value=200, step=10,
-                help="Target length for generated sequences"
+                min_value=190, max_value=220, value=200, step=1,
+                help="Exact length for generated sequences"
             )
         
         start_sequence = st.text_input(
