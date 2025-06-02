@@ -536,6 +536,8 @@ elif page == "GenAI Generation Tool":
             help="Optional prefix for generated sequences"
         )
         
+        st.info("💡 **Generation Strategies:** Top-k creates diverse sequences, Greedy produces consistent patterns, Sampling adds randomness, and Beam explores multiple possibilities. Temperature controls creativity (higher = more random).")
+        
         generate_button = st.button("🧪 Generate Sequences", type="primary", use_container_width=True)
         
     with col2:
