@@ -105,38 +105,38 @@ def add_memory_monitor():
 # ============================================================================
 @st.cache_resource
 def load_model_cached():
-    """Cache YOUR EXACT MODEL loading - prevents reloading on every interaction"""
+    """Cache model loading - prevents reloading on every interaction"""
     try:
-        st.info("🔄 Loading YOUR ML model (cached - one time only)...")
+        st.info("🔄 Loading ML model (cached - one time only)...")
         
         try:
-            # Load YOUR model from Hugging Face (SafeTensors) + local config
+            # Load model from Hugging Face (SafeTensors) + local config
             from transformers import GPT2ForSequenceClassification
             model = GPT2ForSequenceClassification.from_pretrained(
-                "HammadQ123/genai-safetensors-model",  # YOUR MODEL
-                config="updated_model/config.json",    # YOUR CONFIG
+                "HammadQ123/genai-safetensors-model",
+                config="updated_model/config.json",
                 use_safetensors=True,
                 trust_remote_code=False,
                 torch_dtype=torch.float16  # HALF PRECISION - 50% memory reduction
             )
-            st.success("✅ YOUR model loaded from Hugging Face SafeTensors!")
+            st.success("✅ Model loaded from Hugging Face SafeTensors!")
             
         except Exception as hf_error:
             st.warning(f"⚠️ Hugging Face loading failed: {hf_error}")
-            st.info("🔄 Trying YOUR local model files...")
+            st.info("🔄 Trying local model files...")
             
-            # Fallback to YOUR local files
+            # Fallback to local files
             model = GPT2ForSequenceClassification.from_pretrained(
-                "updated_model",  # YOUR LOCAL MODEL
+                "updated_model",
                 local_files_only=True,
                 trust_remote_code=False,
                 torch_dtype=torch.float16
             )
-            st.success("✅ YOUR model loaded from local files!")
+            st.success("✅ Model loaded from local files!")
         
         model.eval()  # Set to evaluation mode
         
-        # Fix padding token for YOUR model
+        # Fix padding token
         if hasattr(model, 'config') and hasattr(model.config, 'pad_token_id'):
             if model.config.pad_token_id is None:
                 model.config.pad_token_id = model.config.eos_token_id
@@ -144,54 +144,54 @@ def load_model_cached():
         return model
         
     except Exception as e:
-        st.error(f"YOUR model loading failed: {e}")
+        st.error(f"Model loading failed: {e}")
         return None
 
 @st.cache_resource 
 def load_tokenizer_cached():
-    """Cache YOUR tokenizer loading"""
+    """Cache tokenizer loading"""
     try:
         from transformers import AutoTokenizer
         
-        # Load YOUR tokenizer from local files first
+        # Load tokenizer from local files first
         tokenizer = AutoTokenizer.from_pretrained(
-            "tokenizer",  # YOUR TOKENIZER FOLDER
+            "tokenizer",
             local_files_only=True
         )
         
-        # Fix padding token issue for YOUR tokenizer
+        # Fix padding token issue
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
             
         return tokenizer
     except Exception as e:
-        st.error(f"YOUR tokenizer loading failed: {e}")
+        st.error(f"Tokenizer loading failed: {e}")
         return None
 
 @st.cache_resource
 def load_scaler_cached():
-    """Cache YOUR scaler loading"""
+    """Cache scaler loading"""
     try:
-        with open("scaler.pkl", 'rb') as f:  # YOUR SCALER FILE
+        with open("scaler.pkl", 'rb') as f:
             scaler = pickle.load(f)
         return scaler
     except Exception as e:
-        st.error(f"YOUR scaler loading failed: {e}")
+        st.error(f"Scaler loading failed: {e}")
         return None
 
 # ============================================================================
 # LAZY LOADING - Only load YOUR models when needed
 # ============================================================================
 def get_model_components():
-    """Lazy loading - only loads YOUR models when actually needed for prediction"""
+    """Lazy loading - only loads models when actually needed for prediction"""
     # Check if we actually need to load (user hasn't made a prediction yet)
     if 'prediction_requested' not in st.session_state:
         return None, None, None
     
-    # Only load YOUR models when prediction is actually requested
-    model = load_model_cached()        # YOUR MODEL
-    tokenizer = load_tokenizer_cached() # YOUR TOKENIZER
-    scaler = load_scaler_cached()      # YOUR SCALER
+    # Only load models when prediction is actually requested
+    model = load_model_cached()
+    tokenizer = load_tokenizer_cached()
+    scaler = load_scaler_cached()
     
     return model, tokenizer, scaler
 
@@ -199,15 +199,15 @@ def get_model_components():
 # OPTIMIZED SETUP FUNCTION
 # ============================================================================
 def setup_model_components_optimized():
-    """Check if YOUR model files exist - same as before but optimized"""
+    """Check if model files exist - same as before but optimized"""
     
-    model_config_path = "updated_model/config.json"  # YOUR CONFIG
-    scaler_path = "scaler.pkl"                        # YOUR SCALER
-    tokenizer_path = "tokenizer"                      # YOUR TOKENIZER
+    model_config_path = "updated_model/config.json"
+    scaler_path = "scaler.pkl"
+    tokenizer_path = "tokenizer"
     
     if os.path.exists(model_config_path) and os.path.exists(scaler_path) and os.path.exists(tokenizer_path):
         st.session_state.model_available = True
-        st.info("✅ YOUR model components detected - will load when needed (lazy loading)")
+        st.info("✅ Model components detected - will load when needed (lazy loading)")
     else:
         st.session_state.model_available = False
         missing_files = []
@@ -218,8 +218,8 @@ def setup_model_components_optimized():
         if not os.path.exists(tokenizer_path):
             missing_files.append("tokenizer/")
         
-        st.error(f"❌ Missing YOUR files: {', '.join(missing_files)}")
-        st.info("📁 Note: model.safetensors loads from YOUR Hugging Face: HammadQ123/genai-safetensors-model")
+        st.error(f"❌ Missing files: {', '.join(missing_files)}")
+        st.info("📁 Note: model.safetensors loads from Hugging Face: HammadQ123/genai-safetensors-model")
 
 # Sidebar
 with st.sidebar:
@@ -230,10 +230,6 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### About")
     st.markdown("Advanced RNA sequence analysis using enhanced feature-based predictions, scaler integration, and ML models.")
-    
-    st.markdown("---")
-    # Add memory monitoring
-    add_memory_monitor()
 
 # Enhanced helper functions (EXACT SAME AS YOUR ORIGINAL)
 def extract_sequence_features(sequence):
@@ -377,26 +373,26 @@ def catastrophic_only_calibration(original_prediction, sequence):
 # OPTIMIZED ML PREDICTION FUNCTION - USES YOUR EXACT SAME LOGIC
 # ============================================================================
 def predict_ml_score_optimized(sequence):
-    """Optimized ML prediction using YOUR EXACT SAME MODELS with memory management"""
+    """Optimized ML prediction with memory management"""
     
     # Mark that prediction was requested (enables lazy loading)
     st.session_state.prediction_requested = True
     
-    # Get YOUR cached components (lazy loaded)
+    # Get cached components (lazy loaded)
     model, tokenizer, scaler = get_model_components()
     
     if not all([model, tokenizer, scaler]):
         return {
             "RMSD_prediction": None, 
             "confidence": "ML Model Required", 
-            "error": "YOUR ML model pipeline not loaded. Need: config.json, tokenizer/, scaler.pkl (local) + model.safetensors (HF)"
+            "error": "ML model pipeline not loaded. Need: config.json, tokenizer/, scaler.pkl (local) + model.safetensors (HF)"
         }
     
     try:
-        # Clean sequence - SAME AS YOUR ORIGINAL
+        # Clean sequence
         sequence = sequence.strip().upper().replace('T', 'U')
         
-        # Tokenize with YOUR tokenizer - SAME AS YOUR ORIGINAL
+        # Tokenize with tokenizer
         inputs = tokenizer(
             sequence, 
             return_tensors="pt", 
@@ -405,7 +401,7 @@ def predict_ml_score_optimized(sequence):
             max_length=128
         )
         
-        # Predict with YOUR model - SAME AS YOUR ORIGINAL but memory optimized
+        # Predict with model
         with torch.no_grad():
             # Move inputs to half precision if model supports it
             if model.dtype == torch.float16:
@@ -414,10 +410,10 @@ def predict_ml_score_optimized(sequence):
             outputs = model(**inputs)
             scaled_prediction = outputs.logits.item()
         
-        # Apply YOUR scaler - SAME AS YOUR ORIGINAL
+        # Apply scaler
         original_prediction = scaler.inverse_transform([[scaled_prediction]])[0][0]
         
-        # Apply YOUR calibration - SAME AS YOUR ORIGINAL
+        # Apply calibration
         calibrated_prediction, correction, was_calibrated = catastrophic_only_calibration(
             original_prediction, sequence
         )
@@ -431,7 +427,7 @@ def predict_ml_score_optimized(sequence):
             "original_pred": original_prediction,
             "calibrated": was_calibrated,
             "correction": correction,
-            "model_source": "YOUR HuggingFace SafeTensors (Optimized)"
+            "model_source": "HuggingFace SafeTensors (Optimized)"
         }
         
     except Exception as e:
@@ -571,25 +567,23 @@ if page == "Home":
     with col2:
         st.markdown("""
         <div class="card">
-            <h3>YOUR Model Status</h3>
+            <h3>Model Status</h3>
         </div>
         """, unsafe_allow_html=True)
         
-        # Check YOUR model status with optimized setup
+        # Check model status with optimized setup
         setup_model_components_optimized()
         
         if st.session_state.get('model_available', False):
-            st.success("🚀 YOUR Optimized ML Model Ready")
-            st.markdown("- ✅ YOUR model.safetensors (Hugging Face)")
-            st.markdown("- ✅ YOUR config.json (Local)")
-            st.markdown("- ✅ YOUR scaler.pkl (Local)")
-            st.markdown("- ✅ YOUR tokenizer/ (Local)")
-            st.markdown("- **Memory:** Half precision (50% reduction)")
+            st.success("🚀 Optimized ML Model Ready")
+            st.markdown("- ✅ model.safetensors (Hugging Face)")
+            st.markdown("- ✅ config.json (Local)")
+            st.markdown("- ✅ scaler.pkl (Local)")
+            st.markdown("- ✅ tokenizer/ (Local)")
             st.markdown("- **Loading:** Cached + Lazy loading")
             st.markdown("- **Cleanup:** Auto garbage collection")
-            st.markdown("- **Same Logic:** All YOUR original functionality")
         else:
-            st.warning("⚠️ YOUR Model Setup Required")
+            st.warning("⚠️ Model Setup Required")
         
         # Multi-pose threshold visualization
         st.markdown('<h4>Multi-Pose ANOVA Binding Threshold</h4>', unsafe_allow_html=True)
@@ -624,18 +618,15 @@ elif page == "Sequence Analyzer":
             # Show memory before prediction
             memory_before = monitor_memory()
             
-            with st.spinner("🔄 Running YOUR optimized ML prediction..."):
-                # Use YOUR EXACT SAME ML model but optimized
+            with st.spinner("🔄 Running optimized ML prediction..."):
+                # Use ML model but optimized
                 ml_result = predict_ml_score_optimized(sequence)
-            
-            # Show memory after prediction
-            memory_after = monitor_memory()
             
             # Check if prediction was successful
             if ml_result["RMSD_prediction"] is not None:
                 score = ml_result["RMSD_prediction"]
                 confidence = ml_result["confidence"]
-                model_type = "YOUR Optimized ML Model with Scaler"
+                model_type = "Optimized ML Model with Scaler"
                 
                 insights = generate_insights(sequence, score)
                 
@@ -660,10 +651,7 @@ elif page == "Sequence Analyzer":
                     binding_quality = "Poor"
                     quality_color = "#D32F2F"
                 
-                st.markdown("### 🔬 YOUR Optimized ML Model Analysis Results")
-                
-                # Show memory usage info
-                st.info(f"💾 Memory: {memory_before:.0f}MB → {memory_after:.0f}MB (Δ {memory_after-memory_before:+.0f}MB)")
+                st.markdown("### 🔬 Optimized ML Model Analysis Results")
                 
                 col1, col2 = st.columns(2)
                 
@@ -674,9 +662,8 @@ elif page == "Sequence Analyzer":
                         <h2>{score:.2f}</h2>
                         <p>Model: {model_type}</p>
                         <p>Confidence: {confidence}</p>
-                        <p>Source: {ml_result.get("model_source", "YOUR Model Optimized")}</p>
-                        <p>Calibrated: {"✅ Yes" if ml_result.get("calibrated", False) else "❌ No"}</p>
-                        <p>Memory: ✅ Half Precision + Cached</p>
+                        <p>Source: {ml_result.get("model_source", "Model Optimized")}</p>
+                        <p>Memory: ✅ Cached</p>
                     </div>
                     """, unsafe_allow_html=True)
                     
@@ -730,14 +717,6 @@ elif page == "Sequence Analyzer":
                     else:
                         st.markdown(f'<p>{insight}</p>', unsafe_allow_html=True)
                 
-                # Show ML model details
-                if ml_result.get("calibrated", False):
-                    st.markdown("#### 🔧 YOUR Model Details")
-                    st.markdown(f"- **Original Prediction:** {ml_result.get('original_pred', 'N/A'):.2f}")
-                    st.markdown(f"- **YOUR Calibration Applied:** +{ml_result.get('correction', 0):.0f}")
-                    st.markdown(f"- **Final Score:** {score:.2f}")
-                    st.markdown(f"- **Memory Optimizations:** Half precision, cached loading, auto cleanup")
-                
                 # Motif analysis
                 st.markdown("#### 🔍 Motif Analysis")
                 col1, col2 = st.columns(2)
@@ -767,12 +746,12 @@ elif page == "Sequence Analyzer":
             
             else:
                 # ML model not available
-                st.error("❌ YOUR ML Model Required")
+                st.error("❌ ML Model Required")
                 st.markdown(f"**Error:** {ml_result.get('error', 'Unknown error')}")
-                st.markdown("**Required YOUR files:**")
-                st.markdown("- `updated_model/` folder with YOUR trained model")
-                st.markdown("- `scaler.pkl` YOUR scaler file")
-                st.markdown("- `tokenizer/` YOUR tokenizer folder")
+                st.markdown("**Required files:**")
+                st.markdown("- `updated_model/` folder with trained model")
+                st.markdown("- `scaler.pkl` scaler file")
+                st.markdown("- `tokenizer/` tokenizer folder")
                 
         else:
             st.warning("Please enter an RNA sequence.")
@@ -884,7 +863,7 @@ elif page == "Dataset Insights":
         fig, ax = plt.subplots(figsize=(12, 6))
         colors = ['#2E7D32' if t == 'Positive' else '#D32F2F' if t == 'Negative' else '#1976D2' for t in feature_df['Type']]
         bars = ax.barh(feature_df['Feature'], feature_df['Importance'], color=colors)
-        ax.set_title("Feature Importance in Binding Prediction (YOUR Model - Memory Optimized)")
+        ax.set_title("Feature Importance in Binding Prediction (Memory Optimized)")
         ax.set_xlabel("Relative Importance")
         
         for i, bar in enumerate(bars):
@@ -898,6 +877,6 @@ elif page == "Dataset Insights":
 # Footer
 st.markdown("""
 ---
-### 🧬 RNA-Protein Binding Prediction Tool - YOUR Models Memory Optimized
-Built with YOUR comprehensive multi-pose statistical analysis | Multi-pose threshold: -7214.13 | F-statistic: 8.8565 (p < 0.0001) | YOUR models optimized: Half precision + Caching + Cleanup
+### 🧬 RNA-Protein Binding Prediction Tool - Memory Optimized
+Built with comprehensive multi-pose statistical analysis | Multi-pose threshold: -7214.13 | F-statistic: 8.8565 (p < 0.0001) | Memory optimized: Caching + Cleanup
 """, unsafe_allow_html=True)
