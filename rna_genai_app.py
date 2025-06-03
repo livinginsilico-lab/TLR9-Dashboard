@@ -204,10 +204,6 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### About")
     st.markdown("This tool allows you to generate novel RNA sequences using advanced GenAI techniques.")
-    
-    st.markdown("---")
-    # Add memory monitoring
-    add_memory_monitor()
 
 # ============================================================================
 # OPTIMIZED PREDICTION FUNCTION
@@ -555,10 +551,6 @@ if page == "Home":
         
         setup_model_components_optimized()
         
-        # Show memory usage
-        current_memory = monitor_memory()
-        st.metric("Current Memory Usage", f"{current_memory:.0f} MB")
-        
         if st.session_state.get('model_available', False):
             st.success("🚀 Optimized GenAI Model Ready")
             st.markdown("- ✅ Repository: genai-compressed-final")
@@ -630,10 +622,6 @@ elif page == "GenAI Generation Tool":
         
         st.info("💡 **Generation Strategies:** Top-k creates diverse sequences, Greedy produces consistent patterns, Sampling adds randomness, and Beam explores multiple possibilities. Temperature controls creativity (higher = more random).")
         
-        # Show current memory before generation
-        memory_before = monitor_memory()
-        st.info(f"💾 Current Memory: {memory_before:.0f} MB")
-        
         generate_button = st.button("🧪 Generate Sequences", type="primary", use_container_width=True)
         
     with col2:
@@ -650,8 +638,6 @@ elif page == "GenAI Generation Tool":
             st.session_state.generation_requested = True
             
             with st.spinner("🔄 Generating sequences using optimized GenAI techniques..."):
-                memory_start = monitor_memory()
-                
                 # Generate sequences with optimization
                 generated_sequences = sampling_optimized(
                     num_samples=num_samples,
@@ -661,16 +647,13 @@ elif page == "GenAI Generation Tool":
                     temperature=temperature
                 )
                 
-                memory_end = monitor_memory()
-                
                 st.session_state.generated_data = pd.DataFrame({
                     "Generated Sequence": generated_sequences,
                     "Sequence Length": [len(seq) for seq in generated_sequences]
                 })
                 
-                # Show memory usage during generation
+                # Show success message
                 st.success(f"✅ Generated {len(generated_sequences)} sequences!")
-                st.info(f"💾 Memory: {memory_start:.0f}MB → {memory_end:.0f}MB (Δ {memory_end-memory_start:+.0f}MB)")
         
         if st.session_state.generated_data is not None:
             df_gen = st.session_state.generated_data
