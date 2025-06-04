@@ -609,7 +609,7 @@ elif page == "GenAI Generation Tool":
         with col_settings2:
             max_new_tokens = st.slider(
                 "Sequence Length", 
-                min_value=190, max_value=220, value=200, step=1,
+                min_value=200, max_value=250, value=225, step=1,
                 help="Exact length for generated sequences"
             )
         
@@ -757,7 +757,7 @@ elif page == "GenAI Generation Tool":
             st.markdown("#### 🌟 Example Generated Sequences")
             example_data = {
                 "Example": ["High-Quality", "Balanced", "Creative"],
-                "Length": [210, 195, 205],
+                "Length": [235, 215, 240],
                 "GC Content": [55.2, 48.7, 52.1],
                 "C Content": [28.1, 22.5, 25.4]
             }
